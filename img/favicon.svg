@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TaskNest tab icon candidate: f-folder-check (own background, readable on any browser chrome) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+	<rect width="32" height="32" rx="7" fill="#0082c9"/>
+	<g transform="translate(16 16) scale(0.78) translate(-16 -16)">
+
+	<path fill="#ffffff" fill-rule="evenodd" d="M4 9.5A2.5 2.5 0 0 1 6.5 7h5.9l2.6 2.8h10.5A2.5 2.5 0 0 1 28 12.3V23a2.5 2.5 0 0 1-2.5 2.5h-19A2.5 2.5 0 0 1 4 23V9.5Zm8.9 7.1-2.3 2.4 4.7 4.8 7.4-8.5-2.2-2-5.2 6-2.4-2.7Z"/>
+
+	</g>
+</svg>

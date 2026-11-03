@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!--
+  - SPDX-FileCopyrightText: 2026 TodoFolder contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+<psalm
+	errorLevel="2"
+	findUnusedBaselineEntry="true"
+	findUnusedCode="false"
+	phpVersion="8.2"
+	resolveFromConfigFile="true"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns="https://getpsalm.org/schema/config"
+	xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd">
+	<projectFiles>
+		<directory name="lib" />
+		<ignoreFiles>
+			<directory name="vendor" />
+		</ignoreFiles>
+	</projectFiles>
+	<!-- The OCP interfaces come from the nextcloud/ocp dev dependency, not from a server checkout. -->
+	<extraFiles>
+		<directory name="vendor/nextcloud/ocp" />
+	</extraFiles>
+	<issueHandlers>
+		<!--
+			Standalone stubs: nextcloud/ocp carries the public interfaces only, so anything
+			that internally references OC\... (for example OCP\Files\IRootFolder pointing at
+			OC\hooks\emitter) reports a missing dependency that does exist in a real server.
+			Inside a server checkout these disappear; here they are noise.
+		-->
+		<MissingDependency errorLevel="suppress" />
+
+		<!--
+			Deck is an optional runtime integration, not a composer dependency: its classes
+			are reached through Server::get() behind class_exists(), so psalm cannot see
+			them and their absence must not fail the build.
+		-->
+		<UndefinedDocblockClass>
+			<errorLevel type="suppress">
+				<referencedClass name="Doctrine\DBAL\Schema\Schema" />
+				<referencedClass name="Doctrine\DBAL\Schema\SchemaException" />
+				<referencedClass name="Doctrine\DBAL\Schema\Table" />
+				<referencedClass name="OCA\Deck\Service\CardService" />
+				<referencedClass name="OCA\Deck\Service\BoardService" />
+				<referencedClass name="OCA\Deck\Db\StackMapper" />
+			</errorLevel>
+		</UndefinedDocblockClass>
+
+		<!--
+			Entity::getId() is declared int by OCP, but rows coming back from a driver have
+			been strings before; the explicit casts are deliberate and cheap.
+		-->
+		<RedundantCastGivenDocblockType errorLevel="suppress" />
+
+		<!-- Psalm 6 defaults that most Nextcloud apps do not follow either. -->
+		<MissingOverrideAttribute errorLevel="suppress" />
+		<ClassMustBeFinal errorLevel="suppress" />
+		<!-- Entity::$id is set by the mapper, not by a constructor. -->
+		<PropertyNotSetInConstructor errorLevel="suppress" />
+		<!-- BackgroundJob::run($argument) is untyped in the parent interface. -->
+		<MissingParamType>
+			<errorLevel type="suppress">
+				<file name="lib/BackgroundJob/QueueWorker.php" />
+			</errorLevel>
+		</MissingParamType>
+	</issueHandlers>
+</psalm>

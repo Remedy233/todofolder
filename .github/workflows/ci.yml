@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 TodoFolder contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Checks that run on every push. They are the same gates the development runbook uses:
+# syntax, code style, static analysis, unit tests, and a production frontend build (so a
+# broken bundle cannot be tagged as a release).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Syntax and style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          coverage: none
+      - name: PHP syntax
+        run: find lib tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: composer validate
+        run: composer validate --no-check-publish
+      - name: Install dev dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: php-cs-fixer
+        run: composer cs:check
+
+  static-analysis:
+    name: Psalm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          coverage: none
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - run: composer psalm -- --output-format=github
+
+  unit-tests:
+    name: PHPUnit (unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          coverage: none
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - run: composer test:unit
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Built assets exist
+        run: |
+          test -f js/todofolder-main.mjs
+          test -f css/todofolder-main.css

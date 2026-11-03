@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 TodoFolder contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Normalise line endings so a checkout on Windows and on Linux produce the same files.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.gz  binary

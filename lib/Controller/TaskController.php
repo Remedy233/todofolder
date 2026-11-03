@@ -1,0 +1,269 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * SPDX-FileCopyrightText: 2026 TodoFolder contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace OCA\TodoFolder\Controller;
+
+use OCA\TodoFolder\AppInfo\Application;
+use OCA\TodoFolder\Db\Task;
+use OCA\TodoFolder\Db\TaskMapper;
+use OCA\TodoFolder\Db\TaskTagMapper;
+use OCA\TodoFolder\Service\AnalysisService;
+use OCA\TodoFolder\Service\DeckBridge;
+use OCA\TodoFolder\Service\Scanner;
+use OCA\TodoFolder\Service\TagService;
+use OCA\TodoFolder\Service\WorkspaceService;
+use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\JSONResponse;
+use OCP\IRequest;
+use Psr\Log\LoggerInterface;
+
+/**
+ * Tasks, scanning and Deck. Every route resolves its workspace through
+ * WorkspaceService first, so an id from another user's account is a 404, not a leak.
+ */
+class TaskController extends Controller {
+	public function __construct(
+		IRequest $request,
+		private TaskMapper $tasks,
+		private TaskTagMapper $taskTags,
+		private WorkspaceService $workspaces,
+		private Scanner $scanner,
+		private AnalysisService $analysis,
+		private DeckBridge $deck,
+		private TagService $tags,
+		private ?string $userId,
+		private LoggerInterface $logger,
+	) {
+		parent::__construct(Application::APP_ID, $request);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/workspaces/{id}/tasks')]
+	public function index(int $id, ?string $status = null): JSONResponse {
+		try {
+			$this->workspaces->getForUser($id, (string)$this->userId);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+		}
+
+		$rows = $this->tasks->findByWorkspace($id, $status);
+		$tags = $this->taskTags->findByTasks(array_map(static fn (Task $t): int => (int)$t->getId(), $rows));
+
+		$out = [];
+		foreach ($rows as $task) {
+			$out[] = [
+				...$task->jsonSerialize(),
+				'tags' => $tags[(int)$task->getId()] ?? [],
+			];
+		}
+		return new JSONResponse(['tasks' => $out]);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/workspaces/{id}/scan')]
+	public function scan(int $id): JSONResponse {
+		try {
+			$workspace = $this->workspaces->getForUser($id, (string)$this->userId, true);
+		} catch (\Throwable $e) {
+			$this->logger->warning('todofolder: scan refused for workspace ' . $id . ': ' . $e->getMessage(), ['exception' => $e]);
+			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+		}
+		$result = $this->scanner->scan($workspace);
+		return new JSONResponse($result);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/tasks/{id}/analyze')]
+	public function analyze(int $id): JSONResponse {
+		try {
+			$task = $this->tasks->find($id);
+			$workspace = $this->workspaces->getForUser($task->getWorkspaceId(), (string)$this->userId, true);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => '任务不存在'], Http::STATUS_NOT_FOUND);
+		}
+		$task = $this->analysis->analyze($task, $workspace);
+		return new JSONResponse([
+			...$task->jsonSerialize(),
+			'tags' => array_map(static fn ($t) => $t->jsonSerialize(), $this->taskTags->findByTask($id)),
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/workspaces/{id}/analyze-pending')]
+	public function analyzePending(int $id): JSONResponse {
+		try {
+			$this->workspaces->getForUser($id, (string)$this->userId, true);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+		}
+
+		// `limit` is a *reserved* request parameter in Nextcloud: the dispatcher validates it
+		// against 1..500 for any request that carries it and answers 500 when it is outside
+		// that range — before this code runs. So the API parameter is `max`, our own clamp
+		// (1..20) is what applies, and `limit` is still honoured when it is in range.
+		$raw = $this->request->getParam('max', $this->request->getParam('limit', 5));
+		return new JSONResponse($this->analysis->analyzePending($id, max(1, min(20, (int)$raw))));
+	}
+
+	/**
+	 * A human correcting the machine: title, due date and priority are editable, and a
+	 * manual edit marks the task ready so the scanner does not re-queue it until the
+	 * folder content actually changes.
+	 */
+	/**
+	 * A human correcting the machine. Editable: title, due date, received date, priority,
+	 * status and the tag list. An explicit null clears a date, so "no deadline" is
+	 * expressible — that is why the fields are read from the raw parameters instead of
+	 * typed arguments, where "absent" and "null" look the same.
+	 *
+	 * The edit also marks the task ready (the scanner will not re-queue it until the
+	 * folder content changes) and, when the workspace is bound to Deck, re-syncs the card
+	 * so title/date/labels/start date never drift apart from the task.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/tasks/{id}')]
+	public function update(int $id): JSONResponse {
+		try {
+			$task = $this->tasks->find($id);
+			$workspace = $this->workspaces->getForUser($task->getWorkspaceId(), (string)$this->userId, true);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => '任务不存在'], Http::STATUS_NOT_FOUND);
+		}
+
+		$params = $this->request->getParams();
+
+		if (array_key_exists('title', $params)) {
+			$title = trim((string)$params['title']);
+			if ($title === '') {
+				return new JSONResponse(['error' => '标题不能为空'], Http::STATUS_BAD_REQUEST);
+			}
+			$task->setTitle(mb_substr($title, 0, 255));
+			$task->lockField('title');
+		}
+		if (array_key_exists('dueDate', $params)) {
+			$task->setDueDate($params['dueDate'] === null || $params['dueDate'] === ''
+				? null
+				: $this->analysis->normaliseDate($params['dueDate']));
+			$task->lockField('due_date');
+		}
+		if (array_key_exists('receivedAt', $params)) {
+			$task->setReceivedAt($params['receivedAt'] === null || $params['receivedAt'] === ''
+				? null
+				: $this->analysis->normaliseDate($params['receivedAt']));
+		}
+		if (array_key_exists('priority', $params)) {
+			$task->setPriority(max(0, min(3, (int)$params['priority'])));
+			$task->lockField('priority');
+		}
+		if (array_key_exists('status', $params)) {
+			$status = (string)$params['status'];
+			$allowed = [Task::STATUS_PENDING, Task::STATUS_READY, Task::STATUS_IGNORED];
+			if (!in_array($status, $allowed, true)) {
+				return new JSONResponse(['error' => '不支持的状态'], Http::STATUS_BAD_REQUEST);
+			}
+			$task->setStatus($status);
+		}
+
+		$task->setUpdatedAt(time());
+		$this->tasks->update($task);
+
+		if (array_key_exists('tags', $params) && is_array($params['tags'])) {
+			$this->tags->setUserTags($task, $params['tags'], $workspace->getUserId());
+		}
+
+		$synced = false;
+		if ($workspace->getDeckStackId() !== null) {
+			$this->analysis->syncDeck($task, $workspace);
+			$synced = true;
+		}
+
+		return new JSONResponse([
+			...$task->jsonSerialize(),
+			'tags' => array_map(static fn ($t) => $t->jsonSerialize(), $this->taskTags->findByTask($id)),
+			'deckSynced' => $synced,
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/tasks/{id}/deck')]
+	public function deck(int $id): JSONResponse {
+		try {
+			$task = $this->tasks->find($id);
+			$workspace = $this->workspaces->getForUser($task->getWorkspaceId(), (string)$this->userId, true);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => '任务不存在'], Http::STATUS_NOT_FOUND);
+		}
+		if ($workspace->getDeckStackId() === null) {
+			return new JSONResponse(['error' => '这个工作区还没有绑定 Deck 看板与列'], Http::STATUS_BAD_REQUEST);
+		}
+		$task = $this->analysis->syncDeck($task, $workspace);
+		return new JSONResponse($task->jsonSerialize());
+	}
+
+	/**
+	 * "一键准备看板": reuse the workspace's board (or one with the same title, or create
+	 * one), make sure it has a column, store the binding, and optionally push the tasks
+	 * that already have an answer.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/workspaces/{id}/decksetup')]
+	public function deckSetup(int $id, bool $syncTasks = true): JSONResponse {
+		try {
+			$workspace = $this->workspaces->getForUser($id, (string)$this->userId, true);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+		}
+
+		try {
+			$binding = $this->deck->ensureBoardAndStack(
+				$workspace->getUserId(),
+				$workspace->getName(),
+				'待办',
+				$workspace->getDeckBoardId(),
+			);
+		} catch (\Throwable $e) {
+			$this->logger->warning('todofolder: deck setup failed: ' . $e->getMessage());
+			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_GATEWAY);
+		}
+
+		$workspace = $this->workspaces->bindDeck($workspace, $binding['boardId'], $binding['stackId'], true);
+
+		$synced = 0;
+		if ($syncTasks) {
+			foreach ($this->tasks->findByWorkspace($id) as $task) {
+				if ($task->getStatus() !== Task::STATUS_READY) {
+					continue;
+				}
+				$this->analysis->syncDeck($task, $workspace);
+				$synced++;
+			}
+		}
+
+		return new JSONResponse([
+			...$binding,
+			'synced' => $synced,
+			'workspace' => $workspace->jsonSerialize(),
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/deck/boards')]
+	public function boards(): JSONResponse {
+		return new JSONResponse(['boards' => $this->deck->boards((string)$this->userId)]);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/deck/boards/{boardId}/stacks')]
+	public function stacks(int $boardId): JSONResponse {
+		return new JSONResponse(['stacks' => $this->deck->stacks((string)$this->userId, $boardId)]);
+	}
+}
