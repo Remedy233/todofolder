@@ -8,10 +8,10 @@
   children — which is what the legacy (34) and the newer layout both expect.
 -->
 <template>
-	<NcAppNavigation v-model:open="navOpen" class="todofolder-navigation" :aria-label="t('工作区')">
+	<NcAppNavigation v-model:open="navOpen" class="todofolder-navigation" :aria-label="t('Workspace')">
 		<template #list>
-			<NcAppNavigationNew :text="t('新建工作区')" @click="openWorkspaceDialog()" />
-			<NcAppNavigationSearch v-model="search" :label="t('搜索工作区')" />
+			<NcAppNavigationNew :text="t('New workspace')" @click="openWorkspaceDialog()" />
+			<NcAppNavigationSearch v-model="search" :label="t('Search workspaces')" />
 			<NcAppNavigationList>
 				<NcAppNavigationItem v-for="workspace in filteredWorkspaces"
 					:key="workspace.id"
@@ -30,13 +30,13 @@
 							<template #icon>
 								<NcIconSvgWrapper :svg="icons.trash" />
 							</template>
-							{{ t('删除工作区') }}
+							{{ t('Delete workspace') }}
 						</NcActionButton>
 						<NcActionButton @click.stop="prepareDeck">
 							<template #icon>
 								<NcIconSvgWrapper :svg="icons.deck" />
 							</template>
-							{{ t('一键准备看板') }}
+							{{ t('Prepare board') }}
 						</NcActionButton>
 					</template>
 				</NcAppNavigationItem>
@@ -48,34 +48,34 @@
 		<div class="todofolder-head">
 			<div class="todofolder-head__titles">
 				<h2 :title="current ? current.folderPath : ''">
-					{{ current ? current.name : t('待办夹') }}
+					{{ current ? current.name : t('TodoFolder') }}
 				</h2>
 				<p v-if="current" class="todofolder-head__path">{{ current.folderPath }}</p>
 			</div>
 			<div v-if="current" class="todofolder-head__actions">
 				<NcButton :disabled="busy" @click="scan">
 					<template #icon><NcLoadingIcon v-if="busy === 'scan'" :size="16" /><NcIconSvgWrapper v-else :svg="icons.refresh" /></template>
-					{{ t('扫描目录') }}
+					{{ t('Scan folder') }}
 				</NcButton>
 				<NcButton type="primary" :disabled="busy" @click="analyzePending">
 					<template #icon><NcLoadingIcon v-if="busy === 'analyze'" :size="16" /><NcIconSvgWrapper v-else :svg="icons.sparkles" /></template>
-					{{ t('分析未完成') }}
+					{{ t('Analyze pending') }}
 				</NcButton>
 				<NcButton :disabled="busy" @click="openSettingsDialog()">
 					<template #icon><NcIconSvgWrapper :svg="icons.cog" /></template>
-					{{ t('工作区设置') }}
+					{{ t('Workspace settings') }}
 				</NcButton>
 			</div>
 		</div>
 
 		<NcEmptyContent v-if="!current"
-			:name="t('还没有工作区')"
-			:description="t('新建一个工作区，指向存放任务的目录：它下面的每个子文件夹就是一个任务。')">
+			:name="t('No workspaces yet')"
+			:description="t('Create a workspace that points at the folder holding your tasks: every subfolder becomes one task.')">
 			<template #icon>
 				<NcIconSvgWrapper :svg="icons.folder" />
 			</template>
 			<template #action>
-				<NcButton type="primary" @click="openWorkspaceDialog()">{{ t('新建工作区') }}</NcButton>
+				<NcButton type="primary" @click="openWorkspaceDialog()">{{ t('New workspace') }}</NcButton>
 			</template>
 		</NcEmptyContent>
 
@@ -84,16 +84,16 @@
 			<NcNoteCard v-if="status" type="info">{{ status }}</NcNoteCard>
 
 			<NcNoteCard v-if="!current.deckStackId" type="warning">
-				{{ t('这个工作区还没绑定 Deck 看板，分析结果不会自动变成卡片。') }}
+				{{ t('This workspace is not linked to a Deck board yet, so results will not become cards automatically.') }}
 				<NcButton type="primary" :disabled="busy" @click="prepareDeck">
 					<template #icon><NcLoadingIcon v-if="busy === 'deck'" :size="16" /></template>
-					{{ t('一键准备看板') }}
+					{{ t('Prepare board') }}
 				</NcButton>
 			</NcNoteCard>
 
 			<NcEmptyContent v-if="tasks.length === 0"
-				:name="t('还没有任务')"
-				:description="t('点「扫描目录」把子文件夹同步成任务，再点「分析未完成」让模型补上标题、日期与标签。')">
+				:name="t('No tasks yet')"
+				:description="t('Use “Scan folder” to turn subfolders into tasks, then “Analyze pending” to let the model fill in title, dates and tags.')">
 				<template #icon>
 					<NcIconSvgWrapper :svg="icons.check" />
 				</template>
@@ -104,7 +104,7 @@
 					:key="task.id"
 					:class="{ 'todofolder-task--done': task.status === 'done' }"
 					:name="task.title || task.folderName"
-					:details="task.dueDate ? t('截止 {date}', { date: task.dueDate }) : ''"
+					:details="task.dueDate ? t('Due {date}', { date: task.dueDate }) : ''"
 					:force-display-actions="true"
 					@click="applyOverride(task)">
 					<template #icon>
@@ -112,7 +112,7 @@
 					</template>
 					<template #subname>
 						<span class="todofolder-task__meta">
-							<span v-if="task.receivedAt">{{ t('收到 {date}', { date: task.receivedAt }) }}</span>
+							<span v-if="task.receivedAt">{{ t('Received {date}', { date: task.receivedAt }) }}</span>
 							<span v-if="task.status !== 'ready'" class="todofolder-task__badge" :class="`todofolder-task__badge--${task.status}`">
 								{{ statusLabel(task.status) }}
 							</span>
@@ -123,15 +123,15 @@
 					<template #actions>
 						<NcActionButton :disabled="busy" @click.stop="analyze(task)">
 							<template #icon><NcIconSvgWrapper :svg="icons.sparkles" /></template>
-							{{ t('分析') }}
+							{{ t('Analyze') }}
 						</NcActionButton>
 						<NcActionButton :disabled="busy" @click.stop="applyOverride(task)">
 							<template #icon><NcIconSvgWrapper :svg="icons.pencil" /></template>
-							{{ t('编辑') }}
+							{{ t('Edit') }}
 						</NcActionButton>
 						<NcActionButton v-if="current.deckStackId" :disabled="busy" @click.stop="syncDeck(task)">
 							<template #icon><NcIconSvgWrapper :svg="icons.deck" /></template>
-							{{ task.deckCardId ? t('更新 Deck 卡') : t('建 Deck 卡') }}
+							{{ task.deckCardId ? t('Update Deck card') : t('Create Deck card') }}
 						</NcActionButton>
 					</template>
 				</NcListItem>
@@ -142,9 +142,9 @@
 	<!-- 新建 / 编辑工作区 -->
 	<NcDialog :open="workspaceDialog" :name="dialogTitle" size="normal" @update:open="workspaceDialog = $event">
 		<div class="todofolder-form">
-			<NcTextField v-model="form.name" :label="t('工作区名称')" />
-			<NcTextField v-model="form.folderPath" :label="t('目录路径')" :helper-text="t('相对你的文件根目录，例如 Tasks/客户A')" />
-			<NcButton @click="browse(form.folderPath)">{{ t('浏览子目录') }}</NcButton>
+			<NcTextField v-model="form.name" :label="t('Workspace name')" />
+			<NcTextField v-model="form.folderPath" :label="t('Folder path')" :helper-text="t('Relative to your files root, for example Tasks/Acme')" />
+			<NcButton @click="browse(form.folderPath)">{{ t('Browse folders') }}</NcButton>
 			<ul v-if="folders.length" class="todofolder-form__folders">
 				<li v-for="folder in folders" :key="folder.fileid">
 					<NcButton variant="tertiary" @click="form.folderPath = folder.path; browse(folder.path)">
@@ -156,11 +156,11 @@
 		<template #actions>
 			<NcDialogButton v-if="editing"
 				variant="error"
-				:label="t('删除工作区')"
+				:label="t('Delete workspace')"
 				:callback="deleteWorkspace" />
-			<NcDialogButton :label="t('取消')" :callback="closeWorkspaceDialog" />
+			<NcDialogButton :label="t('Cancel')" :callback="closeWorkspaceDialog" />
 			<NcDialogButton variant="primary"
-				:label="t('保存')"
+				:label="t('Save')"
 				:disabled="!form.name || !form.folderPath"
 				:callback="saveWorkspace" />
 		</template>
@@ -168,55 +168,55 @@
 
 	<!-- 工作区设置 -->
 	<NcDialog :open="settingsDialog"
-		:name="t('工作区设置')"
+		:name="t('Workspace settings')"
 		size="normal"
 		@update:open="settingsDialog = $event">
 		<div class="todofolder-form">
 			<div class="todofolder-form__field">
-				<label class="todofolder-form__label">{{ t('Deck 看板') }}</label>
-				<NcSelect v-model="deckBoard" :options="boardOptions" :clearable="true" :aria-label="t('Deck 看板')" />
+				<label class="todofolder-form__label">{{ t('Deck board') }}</label>
+				<NcSelect v-model="deckBoard" :options="boardOptions" :clearable="true" :aria-label="t('Deck board')" />
 			</div>
 			<div class="todofolder-form__field">
-				<label class="todofolder-form__label">{{ t('Deck 列') }}</label>
-				<NcSelect v-model="deckStack" :options="stackOptions" :clearable="true" :aria-label="t('Deck 列')" />
+				<label class="todofolder-form__label">{{ t('Deck column') }}</label>
+				<NcSelect v-model="deckStack" :options="stackOptions" :clearable="true" :aria-label="t('Deck column')" />
 			</div>
 			<NcCheckboxRadioSwitch v-model="settings.autoDeck" type="switch">
-				{{ t('分析完成后自动建卡') }}
+				{{ t('Create cards automatically after analysis') }}
 			</NcCheckboxRadioSwitch>
-			<NcTextField v-model="settings.scanInterval" type="number" :label="t('后台扫描间隔（分钟）')" />
+			<NcTextField v-model="settings.scanInterval" type="number" :label="t('Background scan interval (minutes)')" />
 			<NcCheckboxRadioSwitch v-model="settings.scanEnabled" type="switch">
-				{{ t('允许后台定时扫描') }}
+				{{ t('Allow scheduled background scans') }}
 			</NcCheckboxRadioSwitch>
 		</div>
 		<template #actions>
-			<NcDialogButton :label="t('取消')" :callback="closeSettingsDialog" />
-			<NcDialogButton :label="t('一键准备看板')" :callback="prepareDeckFromDialog" />
-			<NcDialogButton variant="primary" :label="t('保存')" :callback="saveSettings" />
+			<NcDialogButton :label="t('Cancel')" :callback="closeSettingsDialog" />
+			<NcDialogButton :label="t('Prepare board')" :callback="prepareDeckFromDialog" />
+			<NcDialogButton variant="primary" :label="t('Save')" :callback="saveSettings" />
 		</template>
 	</NcDialog>
 
 	<!-- 修正任务 -->
 	<NcDialog :open="taskDialog"
-		:name="t('修正任务')"
+		:name="t('Fix task')"
 		size="normal"
 		@update:open="taskDialog = $event">
 		<div v-if="taskForm" class="todofolder-form">
-			<NcTextField v-model="taskForm.title" :label="t('标题')" />
-			<NcTextField v-model="taskForm.receivedAt" type="date" :label="t('收到日期')"
-				:helper-text="t('默认是文件夹第一次出现的那天；会同步成 Deck 卡片的开始日期')" />
-			<NcTextField v-model="taskForm.dueDate" type="date" :label="t('截止日期')"
-				:helper-text="t('留空表示没有期限；与 Deck 卡片的截止日期互通')" />
+			<NcTextField v-model="taskForm.title" :label="t('Title')" />
+			<NcTextField v-model="taskForm.receivedAt" type="date" :label="t('Received date')"
+				:helper-text="t('Defaults to the day the folder first appeared; synced to the Deck card start date')" />
+			<NcTextField v-model="taskForm.dueDate" type="date" :label="t('Due date')"
+				:helper-text="t('Leave empty for no deadline; kept in sync with the Deck card due date')" />
 			<div class="todofolder-form__field">
-				<label class="todofolder-form__label">{{ t('优先级') }}</label>
-				<NcSelect v-model="taskForm.priority" :options="priorityOptions" :aria-label="t('优先级')" />
+				<label class="todofolder-form__label">{{ t('Priority') }}</label>
+				<NcSelect v-model="taskForm.priority" :options="priorityOptions" :aria-label="t('Priority')" />
 			</div>
-			<NcTextField v-model="taskForm.tags" :label="t('标签')"
-				:helper-text="t('用逗号或空格分隔；保存后写回系统标签并同步成 Deck 看板标签')" />
+			<NcTextField v-model="taskForm.tags" :label="t('Tags')"
+				:helper-text="t('Separate with commas or spaces; saved back as system tags and synced to Deck board labels')" />
 			<NcNoteCard v-if="taskForm.summary" type="info">{{ taskForm.summary }}</NcNoteCard>
 		</div>
 		<template #actions>
-			<NcDialogButton :label="t('取消')" :callback="closeTaskDialog" />
-			<NcDialogButton variant="primary" :label="t('保存')" :callback="saveTask" />
+			<NcDialogButton :label="t('Cancel')" :callback="closeTaskDialog" />
+			<NcDialogButton variant="primary" :label="t('Save')" :callback="saveTask" />
 		</template>
 	</NcDialog>
 
@@ -227,7 +227,7 @@
 		@update:open="confirmState.open = $event">
 		<p class="todofolder-confirm__text">{{ confirmState.message }}</p>
 		<template #actions>
-			<NcDialogButton :label="t('取消')" :callback="() => resolveConfirm(false)" />
+			<NcDialogButton :label="t('Cancel')" :callback="() => resolveConfirm(false)" />
 			<NcDialogButton variant="error" :label="confirmState.confirmLabel" :callback="() => resolveConfirm(true)" />
 		</template>
 	</NcDialog>
@@ -257,6 +257,7 @@ import {
 } from '@nextcloud/vue'
 import { getLoggerBuilder } from '@nextcloud/logger'
 import axios from '@nextcloud/axios'
+import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 
 const BASE = generateUrl('/apps/todofolder')
@@ -351,7 +352,7 @@ export default {
 			return this.workspaces.filter((w) => `${w.name} ${w.folderPath}`.toLowerCase().includes(needle))
 		},
 		dialogTitle() {
-			return this.editing ? this.t('工作区设置') : this.t('新建工作区')
+			return this.editing ? this.t('Workspace settings') : this.t('New workspace')
 		},
 		boardOptions() {
 			return this.boards.map((b) => ({ id: b.id, label: b.title }))
@@ -394,20 +395,18 @@ export default {
 	},
 	methods: {
 		t(text, values) {
-			// The build injects appName/appVersion; translations come from Nextcloud's
-			// l10n in a later step, so plain substitution is enough here.
-			return values
-				? Object.entries(values).reduce((acc, [key, value]) => acc.replace(`{${key}}`, String(value)), text)
-				: text
+			// English source string -> the user's language, via the bundle main.js registers
+			// from the l10n file the server loaded. Falls back to the source string.
+			return translate('todofolder', text, values)
 		},
 		statusLabel(status) {
 			return {
-				pending: this.t('待分析'),
-				analyzing: this.t('分析中'),
-				ready: this.t('完成'),
-				error: this.t('出错'),
-				ignored: this.t('忽略'),
-				done: this.t('已完成'),
+				pending: this.t('Pending'),
+				analyzing: this.t('Analyzing'),
+				ready: this.t('Done'),
+				error: this.t('Error'),
+				ignored: this.t('Ignored'),
+				done: this.t('Completed'),
 			}[status] ?? status
 		},
 		statusIcon(task) {
@@ -547,9 +546,9 @@ export default {
 		},
 		async deleteWorkspace() {
 			const ok = await this.confirm({
-				title: this.t('删除工作区'),
-				message: this.t('「{name}」的任务记录会一起删除，文件不受影响。', { name: this.form.name }),
-				confirmLabel: this.t('删除'),
+				title: this.t('Delete workspace'),
+				message: this.t('The task records of “{name}” are deleted too; the files are not touched.', { name: this.form.name }),
+				confirmLabel: this.t('Delete'),
 			})
 			if (!ok) {
 				return false
@@ -566,9 +565,9 @@ export default {
 		},
 		async removeWorkspace(workspace) {
 			const ok = await this.confirm({
-				title: this.t('删除工作区'),
-				message: this.t('「{name}」的任务记录会一起删除，文件不受影响。', { name: workspace.name }),
-				confirmLabel: this.t('删除'),
+				title: this.t('Delete workspace'),
+				message: this.t('The task records of “{name}” are deleted too; the files are not touched.', { name: workspace.name }),
+				confirmLabel: this.t('Delete'),
 			})
 			if (!ok) {
 				return
@@ -606,19 +605,19 @@ export default {
 				return false
 			}
 			this.busy = 'deck'
-			this.status = this.t('正在准备 Deck 看板…')
+			this.status = this.t('Preparing the Deck board…')
 			try {
 				const result = await request(`/api/workspaces/${this.currentId}/decksetup`, { method: 'POST' })
 				await this.load()
 				const parts = [
-					result.createdBoard ? this.t('已新建看板') : this.t('已复用看板'),
-					result.createdStack ? this.t('新建了「待办」列') : this.t('复用「待办」列'),
-					this.t('推送 {n} 张卡', { n: result.synced }),
+					result.createdBoard ? this.t('Created a new board') : this.t('Reused the existing board'),
+					result.createdStack ? this.t('Created the “Todo” column') : this.t('Reused the “Todo” column'),
+					this.t('{n} cards pushed', { n: result.synced }),
 				]
-				this.status = `${this.t('Deck 就绪')}：${parts.join('，')}`
+				this.status = `${this.t('Deck ready')}：${parts.join('，')}`
 				return true
 			} catch (error) {
-				this.error = `${this.t('准备看板失败')}：${error.message}`
+				this.error = `${this.t('Preparing the board failed')}：${error.message}`
 				this.status = ''
 				return false
 			} finally {
@@ -632,11 +631,11 @@ export default {
 		},
 		async scan() {
 			this.busy = 'scan'
-			this.status = this.t('扫描中…')
+			this.status = this.t('Scanning…')
 			try {
 				const result = await request(`/api/workspaces/${this.currentId}/scan`, { method: 'POST' })
 				await this.loadTasks()
-				this.status = this.t('扫描完成：新增 {created}，更新 {updated}，移除 {removed}', {
+				this.status = this.t('Scan finished: {created} added, {updated} updated, {removed} removed', {
 					created: result.created,
 					updated: result.updated,
 					removed: result.removed,
@@ -650,12 +649,12 @@ export default {
 		},
 		async analyzePending() {
 			this.busy = 'analyze'
-			this.status = this.t('分析中…（每批 5 个）')
+			this.status = this.t('Analyzing… (5 per batch)')
 			try {
 				const result = await request(`/api/workspaces/${this.currentId}/analyze-pending?max=5`, { method: 'POST' })
 				await this.loadTasks()
-				this.status = this.t('已分析 {n} 个', { n: result.analyzed })
-					+ (result.failed ? `，${this.t('失败 {n} 个', { n: result.failed })}` : '')
+				this.status = this.t('{n} analyzed', { n: result.analyzed })
+					+ (result.failed ? `，${this.t('{n} failed', { n: result.failed })}` : '')
 			} catch (error) {
 				this.error = error.message
 				this.status = ''
@@ -665,11 +664,11 @@ export default {
 		},
 		async analyze(task) {
 			this.busy = true
-			this.status = this.t('分析「{name}」…', { name: task.folderName })
+			this.status = this.t('Analyzing “{name}”…', { name: task.folderName })
 			try {
 				await request(`/api/tasks/${task.id}/analyze`, { method: 'POST' })
 				await this.loadTasks()
-				this.status = this.t('完成')
+				this.status = this.t('Done')
 			} catch (error) {
 				this.error = error.message
 			} finally {
@@ -681,7 +680,7 @@ export default {
 			try {
 				await request(`/api/tasks/${task.id}/deck`, { method: 'POST' })
 				await this.loadTasks()
-				this.status = this.t('Deck 已同步')
+				this.status = this.t('Deck in sync')
 			} catch (error) {
 				this.error = error.message
 			} finally {
@@ -718,7 +717,7 @@ export default {
 				})
 				this.taskDialog = false
 				await this.loadTasks()
-				this.status = saved.deckSynced ? this.t('已保存，Deck 卡片也已更新') : this.t('已保存')
+				this.status = saved.deckSynced ? this.t('Saved, Deck cards updated too') : this.t('Saved')
 			} catch (error) {
 				this.error = error.message
 			}

@@ -30,7 +30,7 @@ class AdminSection implements IIconSection {
 	}
 
 	public function getName(): string {
-		return $this->l->t('待办夹');
+		return $this->l->t('TodoFolder');
 	}
 
 	public function getPriority(): int {

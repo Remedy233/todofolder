@@ -8,11 +8,18 @@ All notable changes to TodoFolder are documented here. The format follows
 
 ### Added
 
+- **Bilingual UI: English and Chinese, chosen per user.** Every string in the page, the admin
+  settings, the Deck cards and the error messages is now English source text with a Chinese
+  translation in `l10n/zh_CN.{json,js}` (and `zh-CN.*`, because the JavaScript runtime asks
+  for the canonical spelling). A user whose Nextcloud language is Chinese sees Chinese,
+  everybody else gets English, no configuration needed. The model prompt follows the same
+  language, so an English user gets English titles, summaries and tags.
 - **Deck completion mirrors into the task list.** When the card of a task leaves the bound
   column, is marked done or is archived, the task gets the new status `已完成` (shown with a
   green badge and a struck-through title); moving the card back clears it again. Deck stays
   the source of truth: the app only mirrors it, and a rescan no longer queues a finished task
   for analysis again.
+
 ### Fixed
 
 - **A finished Deck card no longer comes back.** The sync used to pass the bound stack id and

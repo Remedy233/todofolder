@@ -18,6 +18,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use OCP\IL10N;
 
 /**
  * occ todofolder:analyze [--workspace=ID] [--limit=N] [--status=pending|error]
@@ -30,16 +31,17 @@ class AnalyzeCommand extends Command {
 		private TaskMapper $tasks,
 		private WorkspaceMapper $workspaces,
 		private AnalysisService $analysis,
+		private IL10N $l10n,
 	) {
 		parent::__construct();
 	}
 
 	protected function configure(): void {
 		$this->setName('todofolder:analyze')
-			->setDescription('对未完成的任务调用模型，写入标题、截止时间与标签')
-			->addOption('workspace', 'w', InputOption::VALUE_REQUIRED, '只处理这个工作区 id')
-			->addOption('limit', 'l', InputOption::VALUE_REQUIRED, '最多处理多少个任务', '5')
-			->addOption('status', 's', InputOption::VALUE_REQUIRED, '只处理这个状态的任务', Task::STATUS_PENDING);
+			->setDescription($this->l10n->t('Run the model over pending tasks and store title, due date and tags'))
+			->addOption('workspace', 'w', InputOption::VALUE_REQUIRED, $this->l10n->t('only handle this workspace id'))
+			->addOption('limit', 'l', InputOption::VALUE_REQUIRED, $this->l10n->t('maximum number of tasks to handle'), '5')
+			->addOption('status', 's', InputOption::VALUE_REQUIRED, $this->l10n->t('only handle tasks with this status'), Task::STATUS_PENDING);
 	}
 
 	protected function execute(InputInterface $input, OutputInterface $output): int {
@@ -69,10 +71,10 @@ class AnalyzeCommand extends Command {
 				$result = $this->analysis->analyze($task, $workspace);
 				if ($result->getStatus() === Task::STATUS_READY) {
 					$output->writeln(sprintf(
-						'  %s → %s（截止 %s，优先级 %s）',
+						'  ' . $this->l10n->t('%s → %s (due %s, priority %s)'),
 						$result->getFolderName(),
-						$result->getTitle() ?? '（无标题）',
-						$result->getDueDate() ?? '未定',
+						$result->getTitle() ?? $this->l10n->t('(no title)'),
+						$result->getDueDate() ?? $this->l10n->t('not set'),
 						(string)$result->getPriority(),
 					));
 				} else {
@@ -80,13 +82,13 @@ class AnalyzeCommand extends Command {
 					$output->writeln(sprintf(
 						'  <error>%s 失败：%s</error>',
 						$result->getFolderName(),
-						$result->getErrorMessage() ?? '未知错误',
+						$result->getErrorMessage() ?? $this->l10n->t('Unknown error'),
 					));
 				}
 			}
 		}
 
-		$output->writeln(sprintf('处理 %d 个，失败 %d 个', $processed, $failed));
+		$output->writeln(sprintf($this->l10n->t('processed %d, failed %d'), $processed, $failed));
 		return $failed === 0 ? 0 : 1;
 	}
 }

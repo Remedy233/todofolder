@@ -19,6 +19,7 @@ use OCA\TodoFolder\Service\Scanner;
 use OCA\TodoFolder\Service\TagService;
 use OCA\TodoFolder\Service\WorkspaceService;
 use OCP\AppFramework\Controller;
+use OCP\IL10N;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -42,6 +43,7 @@ class TaskController extends Controller {
 		private TagService $tags,
 		private ?string $userId,
 		private LoggerInterface $logger,
+		private IL10N $l10n,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -52,7 +54,7 @@ class TaskController extends Controller {
 		try {
 			$this->workspaces->getForUser($id, (string)$this->userId);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Workspace not found')], Http::STATUS_NOT_FOUND);
 		}
 
 		$rows = $this->tasks->findByWorkspace($id, $status);
@@ -75,7 +77,7 @@ class TaskController extends Controller {
 			$workspace = $this->workspaces->getForUser($id, (string)$this->userId, true);
 		} catch (\Throwable $e) {
 			$this->logger->warning('todofolder: scan refused for workspace ' . $id . ': ' . $e->getMessage(), ['exception' => $e]);
-			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Workspace not found')], Http::STATUS_NOT_FOUND);
 		}
 		$result = $this->scanner->scan($workspace);
 		return new JSONResponse($result);
@@ -88,7 +90,7 @@ class TaskController extends Controller {
 			$task = $this->tasks->find($id);
 			$workspace = $this->workspaces->getForUser($task->getWorkspaceId(), (string)$this->userId, true);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '任务不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Task not found')], Http::STATUS_NOT_FOUND);
 		}
 		$task = $this->analysis->analyze($task, $workspace);
 		return new JSONResponse([
@@ -103,7 +105,7 @@ class TaskController extends Controller {
 		try {
 			$this->workspaces->getForUser($id, (string)$this->userId, true);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Workspace not found')], Http::STATUS_NOT_FOUND);
 		}
 
 		// `limit` is a *reserved* request parameter in Nextcloud: the dispatcher validates it
@@ -136,7 +138,7 @@ class TaskController extends Controller {
 			$task = $this->tasks->find($id);
 			$workspace = $this->workspaces->getForUser($task->getWorkspaceId(), (string)$this->userId, true);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '任务不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Task not found')], Http::STATUS_NOT_FOUND);
 		}
 
 		$params = $this->request->getParams();
@@ -144,7 +146,7 @@ class TaskController extends Controller {
 		if (array_key_exists('title', $params)) {
 			$title = trim((string)$params['title']);
 			if ($title === '') {
-				return new JSONResponse(['error' => '标题不能为空'], Http::STATUS_BAD_REQUEST);
+				return new JSONResponse(['error' => $this->l10n->t('The title cannot be empty')], Http::STATUS_BAD_REQUEST);
 			}
 			$task->setTitle(mb_substr($title, 0, 255));
 			$task->lockField('title');
@@ -168,7 +170,7 @@ class TaskController extends Controller {
 			$status = (string)$params['status'];
 			$allowed = [Task::STATUS_PENDING, Task::STATUS_READY, Task::STATUS_IGNORED];
 			if (!in_array($status, $allowed, true)) {
-				return new JSONResponse(['error' => '不支持的状态'], Http::STATUS_BAD_REQUEST);
+				return new JSONResponse(['error' => $this->l10n->t('Unsupported status')], Http::STATUS_BAD_REQUEST);
 			}
 			$task->setStatus($status);
 		}
@@ -200,10 +202,10 @@ class TaskController extends Controller {
 			$task = $this->tasks->find($id);
 			$workspace = $this->workspaces->getForUser($task->getWorkspaceId(), (string)$this->userId, true);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '任务不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Task not found')], Http::STATUS_NOT_FOUND);
 		}
 		if ($workspace->getDeckStackId() === null) {
-			return new JSONResponse(['error' => '这个工作区还没有绑定 Deck 看板与列'], Http::STATUS_BAD_REQUEST);
+			return new JSONResponse(['error' => $this->l10n->t('This workspace is not linked to a Deck board and column yet')], Http::STATUS_BAD_REQUEST);
 		}
 		$task = $this->analysis->syncDeck($task, $workspace);
 		return new JSONResponse($task->jsonSerialize());
@@ -220,14 +222,14 @@ class TaskController extends Controller {
 		try {
 			$workspace = $this->workspaces->getForUser($id, (string)$this->userId, true);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Workspace not found')], Http::STATUS_NOT_FOUND);
 		}
 
 		try {
 			$binding = $this->deck->ensureBoardAndStack(
 				$workspace->getUserId(),
 				$workspace->getName(),
-				'待办',
+				$this->l10n->t('Todo'),
 				$workspace->getDeckBoardId(),
 			);
 		} catch (\Throwable $e) {

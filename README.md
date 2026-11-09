@@ -222,3 +222,13 @@ PHPUnit（unit）、前端构建。
 ## 11. 许可
 
 AGPL-3.0-or-later，见 [LICENSE](LICENSE)。
+
+## Languages
+
+The app ships English source strings plus a Chinese translation (`l10n/zh_CN.json`, `zh-CN.json`).
+Nextcloud picks the file that matches each user's language setting, so no configuration is
+needed: a Chinese user reads Chinese, everybody else reads English. The model prompt follows the
+same language, so the generated titles, summaries and tags come out in the user's language.
+
+Adding a language is a matter of dropping `l10n/<lang>.json` next to those two — see
+`scripts/i18n-catalogue.cjs` for how the Chinese catalogue is generated from the sources.

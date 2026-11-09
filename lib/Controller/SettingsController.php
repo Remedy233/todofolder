@@ -13,6 +13,7 @@ use OCA\TodoFolder\AppInfo\Application;
 use OCA\TodoFolder\Service\AiClient;
 use OCA\TodoFolder\Service\ConfigService;
 use OCP\AppFramework\Controller;
+use OCP\IL10N;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\JSONResponse;
@@ -29,6 +30,7 @@ class SettingsController extends Controller {
 		IRequest $request,
 		private ConfigService $config,
 		private AiClient $ai,
+		private IL10N $l10n,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -50,7 +52,7 @@ class SettingsController extends Controller {
 		if ($baseUrl !== null) {
 			$baseUrl = trim($baseUrl);
 			if ($baseUrl !== '' && !preg_match('#^https?://#i', $baseUrl)) {
-				return new JSONResponse(['error' => '接口地址必须以 http:// 或 https:// 开头'], Http::STATUS_BAD_REQUEST);
+				return new JSONResponse(['error' => $this->l10n->t('The endpoint must start with http:// or https://')], Http::STATUS_BAD_REQUEST);
 			}
 			$this->config->setBaseUrl($baseUrl);
 		}

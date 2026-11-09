@@ -14,6 +14,7 @@ use OCA\TodoFolder\Db\TaskMapper;
 use OCA\TodoFolder\Db\Workspace;
 use OCA\TodoFolder\Db\WorkspaceMapper;
 use OCP\Files\Folder;
+use OCP\IL10N;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -38,6 +39,26 @@ class AnalysisService {
 只输出 JSON，不要解释、不要代码块。
 PROMPT;
 
+	/**
+	 * The same request for everybody else: the model answers in English, so an instance
+	 * whose users read English gets English titles, summaries and tags instead of Chinese
+	 * ones. The language follows the acting user, not the server locale.
+	 */
+	private const SYSTEM_PROMPT_EN = <<<'PROMPT'
+You organise tasks. The user treats one folder as one task, and the folder holds the material for it.
+Read the folder name, the file list and the text content, work out what the task actually is, and
+answer with a single JSON object:
+
+- title: task title, English, at most 60 characters, verb first, do not copy the folder name, no dates
+- summary: what has to be done, who is involved and how far along it is, English, at most 400 characters
+- due_date: deadline as YYYY-MM-DD; null when the material carries no clear date, do not guess
+- priority: one of low | normal | high | urgent, based on time pressure and whether others are blocked
+- tags: 3 to 6 short English labels, at most 20 characters each, used to filter the file list (for example "contract", "awaiting-reply", "Q4"); no dates and no filler
+- reason: one sentence on why you decided this, at most 120 characters
+
+Answer with JSON only, no prose and no code fences.
+PROMPT;
+
 	public function __construct(
 		private TaskMapper $tasks,
 		private WorkspaceMapper $workspaces,
@@ -49,7 +70,17 @@ PROMPT;
 		private ConfigService $config,
 		private DueDateParser $dates,
 		private LoggerInterface $logger,
+		private IL10N $l10n,
 	) {
+	}
+
+	/**
+	 * Chinese users get the Chinese prompt, everybody else the English one.
+	 */
+	private function systemPrompt(): string {
+		return str_starts_with($this->l10n->getLanguageCode(), 'zh')
+			? self::SYSTEM_PROMPT
+			: self::SYSTEM_PROMPT_EN;
 	}
 
 	/**
@@ -68,7 +99,7 @@ PROMPT;
 			}
 
 			$extract = $this->extractor->extract($taskFolder);
-			$answer = $this->ai->chatJson(self::SYSTEM_PROMPT, $this->prompt($task, $workspace, $extract, $taskFolder));
+			$answer = $this->ai->chatJson($this->systemPrompt(), $this->prompt($task, $workspace, $extract, $taskFolder));
 
 			// A human who edited a field wins over the model: those columns are locked.
 			if (!$task->isFieldLocked('title')) {
@@ -96,7 +127,7 @@ PROMPT;
 				if ($workspace->getDeckStackId() === null) {
 					// Silently doing nothing is what makes Deck sync look broken: say it on
 					// the task instead, pointing at the one-click fix.
-					$task->setErrorMessage('工作区还没绑定 Deck 看板/列，所以没有建卡。在工作区设置里点「一键准备看板」即可。');
+					$task->setErrorMessage($this->l10n->t('This workspace has no Deck board or column yet, so no card was created. Use “Prepare board” in the workspace settings.'));
 					$task->setUpdatedAt(time());
 					$this->tasks->update($task);
 				} else {
@@ -134,7 +165,7 @@ PROMPT;
 			}
 		} catch (\Throwable $e) {
 			$this->logger->warning('todofolder: deck sync failed for task ' . $task->getId() . ': ' . $e->getMessage());
-			$task->setErrorMessage('Deck 同步失败：' . mb_substr($e->getMessage(), 0, 300));
+			$task->setErrorMessage($this->l10n->t('Deck sync failed: ') . mb_substr($e->getMessage(), 0, 300));
 			$task->setUpdatedAt(time());
 			$this->tasks->update($task);
 		}
@@ -172,14 +203,14 @@ PROMPT;
 	 */
 	private function prompt(Task $task, Workspace $workspace, array $extract, Folder $folder): string {
 		$lines = [];
-		$lines[] = '工作区：' . $workspace->getName();
-		$lines[] = '文件夹名：' . $task->getFolderName();
-		$lines[] = '文件数：' . count($extract['files']) . ($extract['truncated'] ? '（内容已截断）' : '');
+		$lines[] = $this->l10n->t('Workspace: ') . $workspace->getName();
+		$lines[] = $this->l10n->t('Folder: ') . $task->getFolderName();
+		$lines[] = $this->l10n->t('File count: ') . count($extract['files']) . ($extract['truncated'] ? $this->l10n->t('(content truncated)') : '');
 		$lines[] = '';
-		$lines[] = '文件清单：';
+		$lines[] = $this->l10n->t('Files: ');
 		foreach ($extract['files'] as $file) {
 			$lines[] = sprintf(
-				'- %s（%s，修改于 %s）',
+				$this->l10n->t('- %s (%s, modified %s)'),
 				$file['name'],
 				$this->humanSize($file['size']),
 				date('Y-m-d', $file['mtime']),
@@ -187,13 +218,13 @@ PROMPT;
 		}
 		if ($extract['text'] !== '') {
 			$lines[] = '';
-			$lines[] = '文本内容：';
+			$lines[] = $this->l10n->t('Text: ');
 			$lines[] = $extract['text'];
 		}
 		$extra = $workspace->getAiExtraPrompt();
 		if ($extra !== null && trim($extra) !== '') {
 			$lines[] = '';
-			$lines[] = '额外要求：' . $extra;
+			$lines[] = $this->l10n->t('Extra requirements: ') . $extra;
 		}
 		return implode("\n", $lines);
 	}

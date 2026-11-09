@@ -72,6 +72,10 @@ class PageController extends Controller {
 			'href' => $this->url->linkTo(Application::APP_ID, 'img/favicon.png') . '?v=' . $version,
 		]);
 
+		// The Vue bundle calls t() with English source strings; this loads l10n/<lang>.js
+		// for the current user, so a Chinese user reads Chinese and everybody else English.
+		Util::addTranslations(Application::APP_ID);
+
 		return new TemplateResponse(Application::APP_ID, 'index');
 	}
 

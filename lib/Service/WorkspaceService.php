@@ -22,6 +22,7 @@ use OCP\Files\NotFoundException;
 use OCP\IGroupManager;
 use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
+use OCP\IL10N;
 
 /**
  * Workspace lifecycle plus the permission rules every controller and job goes through.
@@ -41,6 +42,7 @@ class WorkspaceService {
 		private IGroupManager $groupManager,
 		private IUserManager $userManager,
 		private LoggerInterface $logger,
+		private IL10N $l10n,
 	) {
 	}
 
@@ -93,10 +95,10 @@ class WorkspaceService {
 		}
 		$permission = $this->sharePermission($workspaceId, $userId);
 		if ($permission === 0) {
-			throw new NotFoundException('工作区 ' . $workspaceId . ' 对 ' . $userId . ' 不可见');
+			throw new NotFoundException($this->l10n->t('Workspace %1$s is not visible to %2$s', [(string)$workspaceId, $userId]));
 		}
 		if ($needWrite && $permission < WorkspaceShare::PERM_WRITE) {
-			throw new NotFoundException('工作区 ' . $workspaceId . ' 对 ' . $userId . ' 是只读的');
+			throw new NotFoundException($this->l10n->t('Workspace %1$s is read-only for %2$s', [(string)$workspaceId, $userId]));
 		}
 		return $workspace;
 	}

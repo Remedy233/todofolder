@@ -9,35 +9,35 @@
   the heading, description and spacing match the rest of the settings screen.
 -->
 <template>
-	<NcSettingsSection :name="t('待办夹')"
-		:description="t('用模型分析任务目录里的文件，生成标题、截止日期与标签，并同步到 Deck。')">
+	<NcSettingsSection :name="t('TodoFolder')"
+		:description="t('Analyze the files inside each task folder, produce title, due date and tags, and sync them to Deck.')">
 		<div class="todofolder-admin">
 			<NcNoteCard type="info">
-				{{ t('模型走兼容 OpenAI 的接口。接口地址留空时使用内置 mock，用来在没有真实模型时验证全链路。') }}
+				{{ t('The model is called through an OpenAI-compatible API. Leave the endpoint empty to use the built-in mock, which exercises the whole chain without a real model.') }}
 			</NcNoteCard>
 
-			<NcNoteCard v-if="saved" type="success">{{ t('已保存') }}</NcNoteCard>
+			<NcNoteCard v-if="saved" type="success">{{ t('Saved') }}</NcNoteCard>
 			<NcNoteCard v-if="error" type="error">{{ error }}</NcNoteCard>
 
 			<NcTextField v-model="form.baseUrl"
-				:label="t('接口地址（base_url）')"
+				:label="t('Endpoint (base_url）')"
 				placeholder="https://api.deepseek.com/v1" />
-			<NcTextField v-model="form.model" :label="t('模型')" placeholder="deepseek-chat" />
+			<NcTextField v-model="form.model" :label="t('Model')" placeholder="deepseek-chat" />
 			<NcTextField v-model="form.apiKey"
 				type="password"
-				:label="t('API Key')"
+				:label="t('API key')"
 				:helper-text="keyHint" />
 			<div class="todofolder-admin__pair">
-				<NcTextField v-model="form.timeout" type="number" :label="t('超时（秒）')" />
-				<NcTextField v-model="form.queueBatch" type="number" :label="t('每轮后台分析任务数')" />
+				<NcTextField v-model="form.timeout" type="number" :label="t('Timeout (seconds)')" />
+				<NcTextField v-model="form.queueBatch" type="number" :label="t('Tasks analyzed per background run')" />
 			</div>
 			<NcCheckboxRadioSwitch v-model="form.deckEnabled" type="switch">
-				{{ t('启用 Deck 同步') }}
+				{{ t('Enable Deck sync') }}
 			</NcCheckboxRadioSwitch>
 
 			<div class="todofolder-admin__buttons">
-				<NcButton type="primary" :disabled="busy" @click="save">{{ t('保存') }}</NcButton>
-				<NcButton :disabled="busy" @click="test">{{ t('测试端点') }}</NcButton>
+				<NcButton type="primary" :disabled="busy" @click="save">{{ t('Save') }}</NcButton>
+				<NcButton :disabled="busy" @click="test">{{ t('Test endpoint') }}</NcButton>
 				<span v-if="testResult" class="todofolder-admin__result">{{ testResult }}</span>
 			</div>
 		</div>
@@ -48,6 +48,7 @@
 import { NcButton, NcCheckboxRadioSwitch, NcNoteCard, NcSettingsSection, NcTextField } from '@nextcloud/vue'
 import axios from '@nextcloud/axios'
 import { loadState } from '@nextcloud/initial-state'
+import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 
 const BASE = generateUrl('/apps/todofolder')
@@ -84,15 +85,13 @@ export default {
 	computed: {
 		keyHint() {
 			return this.config?.apiKeySet
-				? this.t('已设置：{hint}（留空表示不修改）', { hint: this.config.apiKeyHint })
-				: this.t('未设置（当前使用 mock）')
+				? this.t('Set: {hint} (leave empty to keep it)', { hint: this.config.apiKeyHint })
+				: this.t('Not set (using the mock)')
 		},
 	},
 	methods: {
 		t(text, values) {
-			return values
-				? Object.entries(values).reduce((acc, [key, value]) => acc.replace(`{${key}}`, String(value)), text)
-				: text
+			return translate('todofolder', text, values)
 		},
 		async save() {
 			this.busy = true
@@ -118,16 +117,16 @@ export default {
 		},
 		async test() {
 			this.busy = true
-			this.testResult = this.t('测试中…')
+			this.testResult = this.t('Testing…')
 			try {
 				const { data } = await axios.post(`${BASE}/api/settings/test`)
-				this.testResult = this.t('正常：model={model}，mock={mock}，{ms}ms', {
+				this.testResult = this.t('OK: model={model}, mock={mock}, {ms}ms', {
 					model: data.model,
 					mock: data.mock,
 					ms: data.latencyMs,
 				})
 			} catch (error) {
-				this.testResult = this.t('失败：{reason}', { reason: error?.response?.data?.error ?? error.message })
+				this.testResult = this.t('Failed: {reason}', { reason: error?.response?.data?.error ?? error.message })
 			} finally {
 				this.busy = false
 			}

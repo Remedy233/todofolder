@@ -16,6 +16,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use OCP\IL10N;
 
 /**
  * occ todofolder:scan [--workspace=ID] [--all]
@@ -27,15 +28,16 @@ class ScanCommand extends Command {
 	public function __construct(
 		private WorkspaceMapper $workspaces,
 		private Scanner $scanner,
+		private IL10N $l10n,
 	) {
 		parent::__construct();
 	}
 
 	protected function configure(): void {
 		$this->setName('todofolder:scan')
-			->setDescription('扫描工作区目录，把子文件夹同步成任务（不调用模型）')
-			->addOption('workspace', 'w', InputOption::VALUE_REQUIRED, '只扫描这个工作区 id')
-			->addOption('all', 'a', InputOption::VALUE_NONE, '扫描所有工作区，忽略各自的定时间隔');
+			->setDescription($this->l10n->t('Scan workspace folders and turn subfolders into tasks (no model call)'))
+			->addOption('workspace', 'w', InputOption::VALUE_REQUIRED, $this->l10n->t('only scan this workspace id'))
+			->addOption('all', 'a', InputOption::VALUE_NONE, $this->l10n->t('scan every workspace, ignoring their intervals'));
 	}
 
 	protected function execute(InputInterface $input, OutputInterface $output): int {
@@ -52,7 +54,7 @@ class ScanCommand extends Command {
 		}
 
 		if ($targets === []) {
-			$output->writeln('<comment>没有需要扫描的工作区</comment>');
+			$output->writeln('<comment>' . $this->l10n->t('No workspace needs scanning') . '</comment>');
 			return 0;
 		}
 
@@ -62,7 +64,7 @@ class ScanCommand extends Command {
 			try {
 				$result = $this->scanner->scan($workspace);
 				$output->writeln(sprintf(
-					'%s（%s）：新增 %d，更新 %d，移除 %d，共 %d 个任务',
+					$this->l10n->t('%s (%s): %d added, %d updated, %d removed, %d tasks total'),
 					$workspace->getName(),
 					$workspace->getFolderPath(),
 					$result['created'],

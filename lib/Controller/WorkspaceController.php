@@ -12,6 +12,7 @@ namespace OCA\TodoFolder\Controller;
 use OCA\TodoFolder\AppInfo\Application;
 use OCA\TodoFolder\Service\WorkspaceService;
 use OCP\AppFramework\Controller;
+use OCP\IL10N;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -27,6 +28,7 @@ class WorkspaceController extends Controller {
 		IRequest $request,
 		private WorkspaceService $workspaces,
 		private ?string $userId,
+		private IL10N $l10n,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -73,7 +75,7 @@ class WorkspaceController extends Controller {
 			}
 		}
 		if ($fields === []) {
-			return new JSONResponse(['error' => '没有要更新的字段'], Http::STATUS_BAD_REQUEST);
+			return new JSONResponse(['error' => $this->l10n->t('Nothing to update')], Http::STATUS_BAD_REQUEST);
 		}
 
 		try {
@@ -82,13 +84,13 @@ class WorkspaceController extends Controller {
 			// renaming or moving it changes the meaning for everyone else.
 			$structural = array_intersect(array_keys($fields), ['name', 'folderPath']);
 			if ($structural !== [] && $workspace->getUserId() !== (string)$this->userId) {
-				return new JSONResponse(['error' => '只有工作区所有者可以改名或更换目录'], Http::STATUS_FORBIDDEN);
+				return new JSONResponse(['error' => $this->l10n->t('Only the workspace owner can rename it or change its folder')], Http::STATUS_FORBIDDEN);
 			}
 			$workspace = $this->workspaces->update($workspace, $fields);
 		} catch (\InvalidArgumentException $e) {
 			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Workspace not found')], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse($workspace->jsonSerialize());
 	}
@@ -100,11 +102,11 @@ class WorkspaceController extends Controller {
 			$workspace = $this->workspaces->getForUser($id, (string)$this->userId, true);
 			if ($workspace->getUserId() !== $this->userId) {
 				// Only the owner may drop a workspace: a share grants task access, not deletion.
-				return new JSONResponse(['error' => '只有工作区所有者可以删除工作区'], Http::STATUS_FORBIDDEN);
+				return new JSONResponse(['error' => $this->l10n->t('Only the workspace owner can delete the workspace')], Http::STATUS_FORBIDDEN);
 			}
 			$this->workspaces->delete($workspace);
 		} catch (\Throwable) {
-			return new JSONResponse(['error' => '工作区不存在'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l10n->t('Workspace not found')], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse(['deleted' => $id]);
 	}

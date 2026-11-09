@@ -11,6 +11,7 @@ use OCA\TodoFolder\AppInfo\Application;
 
 \OCP\Util::addScript(Application::APP_ID, Application::APP_ID . '-admin');
 \OCP\Util::addStyle(Application::APP_ID, Application::APP_ID . '-main');
+\OCP\Util::addTranslations(Application::APP_ID);
 ?>
 
 <div id="todofolder-admin-app" class="todofolder-admin-root" data-testid="todofolder-admin"></div>
