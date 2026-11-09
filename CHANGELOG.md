@@ -4,6 +4,16 @@ All notable changes to TodoFolder are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2026-11-09
+
+### Fixed
+
+- **Analysis failed with "The arguments array must contain 3 items".** Nextcloud's `IL10N::t()`
+  runs the translated string through `vsprintf`, so a message that carries `%s` placeholders has
+  to receive its arguments as the second parameter. Four call sites still wrapped `t()` in
+  `sprintf()` and passed no arguments, which threw a `ValueError` and left every task in the
+  `error` state: the file list of the analysis prompt, the `occ todofolder:analyze` summary, the
+  `occ todofolder:scan` summary and the mock summary of the built-in model.
 ## [0.0.4] - 2026-11-09
 
 ### Changed

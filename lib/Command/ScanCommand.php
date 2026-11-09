@@ -63,15 +63,14 @@ class ScanCommand extends Command {
 			/** @var Workspace $workspace */
 			try {
 				$result = $this->scanner->scan($workspace);
-				$output->writeln(sprintf(
-					$this->l10n->t('%s (%s): %d added, %d updated, %d removed, %d tasks total'),
+				$output->writeln($this->l10n->t('%s (%s): %d added, %d updated, %d removed, %d tasks total', [
 					$workspace->getName(),
 					$workspace->getFolderPath(),
 					$result['created'],
 					$result['updated'],
 					$result['removed'],
 					$result['tasks'],
-				));
+				]));
 			} catch (\Throwable $e) {
 				$failed++;
 				$output->writeln(sprintf('<error>%s 扫描失败：%s</error>', $workspace->getName(), $e->getMessage()));

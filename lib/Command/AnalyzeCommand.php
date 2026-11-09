@@ -70,25 +70,26 @@ class AnalyzeCommand extends Command {
 				$processed++;
 				$result = $this->analysis->analyze($task, $workspace);
 				if ($result->getStatus() === Task::STATUS_READY) {
-					$output->writeln(sprintf(
-						'  ' . $this->l10n->t('%s → %s (due %s, priority %s)'),
+					$output->writeln($this->l10n->t('  %s → %s (due %s, priority %s)', [
 						$result->getFolderName(),
 						$result->getTitle() ?? $this->l10n->t('(no title)'),
 						$result->getDueDate() ?? $this->l10n->t('not set'),
 						(string)$result->getPriority(),
-					));
+					]));
+				} elseif ($result->getStatus() === Task::STATUS_DONE) {
+					// The task is finished on the Deck side; that is a result, not a failure.
+					$output->writeln('  ' . $this->l10n->t('%s → already finished, left alone', [$result->getFolderName()]));
 				} else {
 					$failed++;
-					$output->writeln(sprintf(
-						'  <error>%s 失败：%s</error>',
+					$output->writeln('  <error>' . $this->l10n->t('%s failed: %s', [
 						$result->getFolderName(),
 						$result->getErrorMessage() ?? $this->l10n->t('Unknown error'),
-					));
+					]) . '</error>');
 				}
 			}
 		}
 
-		$output->writeln(sprintf($this->l10n->t('processed %d, failed %d'), $processed, $failed));
+		$output->writeln($this->l10n->t('processed %d, failed %d', [$processed, $failed]));
 		return $failed === 0 ? 0 : 1;
 	}
 }

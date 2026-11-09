@@ -13,8 +13,11 @@ use OCA\TodoFolder\Db\Task;
 use OCA\TodoFolder\Db\TaskMapper;
 use OCA\TodoFolder\Db\Workspace;
 use OCA\TodoFolder\Db\WorkspaceMapper;
+use OCA\TodoFolder\AppInfo\Application;
 use OCP\Files\Folder;
+use OCP\IConfig;
 use OCP\IL10N;
+use OCP\L10N\IFactory;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -71,14 +74,26 @@ PROMPT;
 		private DueDateParser $dates,
 		private LoggerInterface $logger,
 		private IL10N $l10n,
+		private IFactory $l10nFactory,
+		private IConfig $systemConfig,
 	) {
+	}
+
+	/**
+	 * The language the analysis runs in. Without a session (occ, the background job) the
+	 * injected IL10N falls back to the server default, which would hand a Chinese user English
+	 * titles; the workspace owner's language is the one that matters here.
+	 */
+	private function l10nForUser(string $userId): IL10N {
+		$language = $this->systemConfig->getUserValue($userId, 'core', 'lang', '');
+		return $language === '' ? $this->l10n : $this->l10nFactory->get(Application::APP_ID, $language);
 	}
 
 	/**
 	 * Chinese users get the Chinese prompt, everybody else the English one.
 	 */
-	private function systemPrompt(): string {
-		return str_starts_with($this->l10n->getLanguageCode(), 'zh')
+	private function systemPrompt(IL10N $l10n): string {
+		return str_starts_with($l10n->getLanguageCode(), 'zh')
 			? self::SYSTEM_PROMPT
 			: self::SYSTEM_PROMPT_EN;
 	}
@@ -99,7 +114,8 @@ PROMPT;
 			}
 
 			$extract = $this->extractor->extract($taskFolder);
-			$answer = $this->ai->chatJson($this->systemPrompt(), $this->prompt($task, $workspace, $extract, $taskFolder));
+			$l10n = $this->l10nForUser($workspace->getUserId());
+			$answer = $this->ai->chatJson($this->systemPrompt($l10n), $this->prompt($task, $workspace, $extract, $taskFolder, $l10n));
 
 			// A human who edited a field wins over the model: those columns are locked.
 			if (!$task->isFieldLocked('title')) {
@@ -201,30 +217,31 @@ PROMPT;
 	/**
 	 * @param array{files: array<int, array{name: string, size: int, mtime: int, text: bool}>, text: string, hash: string, truncated: bool} $extract
 	 */
-	private function prompt(Task $task, Workspace $workspace, array $extract, Folder $folder): string {
+	private function prompt(Task $task, Workspace $workspace, array $extract, Folder $folder, IL10N $l10n): string {
 		$lines = [];
-		$lines[] = $this->l10n->t('Workspace: ') . $workspace->getName();
-		$lines[] = $this->l10n->t('Folder: ') . $task->getFolderName();
-		$lines[] = $this->l10n->t('File count: ') . count($extract['files']) . ($extract['truncated'] ? $this->l10n->t('(content truncated)') : '');
+		$lines[] = $l10n->t('Workspace: ') . $workspace->getName();
+		$lines[] = $l10n->t('Folder: ') . $task->getFolderName();
+		$lines[] = $l10n->t('File count: ') . count($extract['files']) . ($extract['truncated'] ? $l10n->t('(content truncated)') : '');
 		$lines[] = '';
-		$lines[] = $this->l10n->t('Files: ');
+		$lines[] = $l10n->t('Files: ');
 		foreach ($extract['files'] as $file) {
-			$lines[] = sprintf(
-				$this->l10n->t('- %s (%s, modified %s)'),
+			// The placeholder arguments go through t() itself: Nextcloud runs the translated
+			// string through vsprintf, so a "%s" left without arguments throws a ValueError.
+			$lines[] = $l10n->t('- %s (%s, modified %s)', [
 				$file['name'],
 				$this->humanSize($file['size']),
 				date('Y-m-d', $file['mtime']),
-			);
+			]);
 		}
 		if ($extract['text'] !== '') {
 			$lines[] = '';
-			$lines[] = $this->l10n->t('Text: ');
+			$lines[] = $l10n->t('Text: ');
 			$lines[] = $extract['text'];
 		}
 		$extra = $workspace->getAiExtraPrompt();
 		if ($extra !== null && trim($extra) !== '') {
 			$lines[] = '';
-			$lines[] = $this->l10n->t('Extra requirements: ') . $extra;
+			$lines[] = $l10n->t('Extra requirements: ') . $extra;
 		}
 		return implode("\n", $lines);
 	}
