@@ -4,6 +4,15 @@ All notable changes to TodoFolder are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.4] - 2026-11-09
+
+### Changed
+
+- **Store screenshots point back at the URLs the store has cached.** The store proxies every
+  screenshot through `usercontent.apps.nextcloud.com`, which keeps an entry until 2038 and is
+  currently not fetching new ones: any novel URL answers `File not found`, so 0.0.3's refreshed
+  images rendered as broken pictures. 0.0.4 goes back to the four URLs the proxy already holds,
+  and `screenshots/app/` stays in the repository for the next attempt.
 ## [0.0.3] - 2026-11-09
 
 ### Changed
