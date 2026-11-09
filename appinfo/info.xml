@@ -43,10 +43,10 @@ Workspaces are private by default and can be shared with groups, read-only or re
 	<category>tools</category>
 	<bugs>https://github.com/Remedy233/todofolder/issues</bugs>
 	<repository type="git">https://github.com/Remedy233/todofolder.git</repository>
-	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/1-tasks.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/2-edit-task.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/3-workspace-settings.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/4-admin-settings.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/app/1-tasks.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/app/2-edit-task.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/app/3-workspace-settings.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/app/4-admin-settings.png</screenshot>
 	<dependencies>
 		<php min-version="8.2"/>
 		<nextcloud min-version="33" max-version="35"/>
