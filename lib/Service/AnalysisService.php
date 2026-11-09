@@ -118,9 +118,17 @@ PROMPT;
 		try {
 			// The tags become Deck labels; read them from the table rather than from the
 			// model answer, so a human edit to the tags is what lands on the card.
-			$cardId = $this->deck->sync($task, $workspace, $this->tags->namesForTask((int)$task->getId()));
-			if ($cardId !== null) {
-				$task->setDeckCardId($cardId);
+			$sync = $this->deck->sync($task, $workspace, $this->tags->namesForTask((int)$task->getId()));
+			if ($sync !== null) {
+				$task->setDeckCardId($sync['cardId']);
+				// Deck owns completion: a card that was dragged out of the column, marked
+				// done or archived marks the task as done, and a card that is back in the
+				// column clears that mark again.
+				if ($sync['finished']) {
+					$task->setStatus(Task::STATUS_DONE);
+				} elseif ($task->getStatus() === Task::STATUS_DONE) {
+					$task->setStatus(Task::STATUS_READY);
+				}
 				$task->setUpdatedAt(time());
 				$this->tasks->update($task);
 			}

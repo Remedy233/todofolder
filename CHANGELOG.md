@@ -6,6 +6,13 @@ All notable changes to TodoFolder are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Deck completion mirrors into the task list.** When the card of a task leaves the bound
+  column, is marked done or is archived, the task gets the new status `已完成` (shown with a
+  green badge and a struck-through title); moving the card back clears it again. Deck stays
+  the source of truth: the app only mirrors it, and a rescan no longer queues a finished task
+  for analysis again.
 ### Fixed
 
 - **A finished Deck card no longer comes back.** The sync used to pass the bound stack id and

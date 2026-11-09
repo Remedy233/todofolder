@@ -102,6 +102,7 @@
 			<ul v-else class="todofolder-tasks">
 				<NcListItem v-for="task in tasks"
 					:key="task.id"
+					:class="{ 'todofolder-task--done': task.status === 'done' }"
 					:name="task.title || task.folderName"
 					:details="task.dueDate ? t('截止 {date}', { date: task.dueDate }) : ''"
 					:force-display-actions="true"
@@ -406,13 +407,14 @@ export default {
 				ready: this.t('完成'),
 				error: this.t('出错'),
 				ignored: this.t('忽略'),
+				done: this.t('已完成'),
 			}[status] ?? status
 		},
 		statusIcon(task) {
 			if (task.status === 'error') {
 				return icons.warning
 			}
-			if (task.status === 'ready') {
+			if (task.status === 'ready' || task.status === 'done') {
 				return icons.check
 			}
 			return icons.clock
@@ -747,6 +749,14 @@ export default {
 	flex: 1 1 auto;
 	min-width: 0;
 }
+/* Finished in Deck: settled work, not pending work. Unscoped because the title element
+   lives inside NcListItem, which has no scope id of this component. */
+
+.todofolder-task--done .list-item-content__name {
+	color: var(--color-text-maxcontrast, #666);
+	text-decoration: line-through;
+	text-decoration-thickness: 1px;
+}
 </style>
 
 <style scoped>
@@ -819,6 +829,16 @@ export default {
 	background: var(--color-error, #c00);
 	color: #fff;
 }
+
+/* Finished in Deck: it should read as settled work, not as something still pending.
+   Explicit colours: the theme's success token is a pale tint that white text cannot sit on. */
+.todofolder-task__badge--done {
+	background: #2f9e44;
+	color: #fff;
+	font-weight: 600;
+}
+
+
 
 .todofolder-task__error {
 	color: var(--color-error-text, #c00);

@@ -60,6 +60,12 @@ class Task extends Entity implements \JsonSerializable {
 	public const STATUS_READY = 'ready';
 	public const STATUS_ERROR = 'error';
 	public const STATUS_IGNORED = 'ignored';
+	/**
+	 * Set when the task's Deck card is finished: dragged out of the bound column, marked
+	 * done or archived. Deck owns completion, so the sync writes this status and clears it
+	 * again once the card is back in the bound column.
+	 */
+	public const STATUS_DONE = 'done';
 
 	protected int $workspaceId = 0;
 	protected string $folderPath = '';

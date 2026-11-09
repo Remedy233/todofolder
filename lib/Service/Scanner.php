@@ -84,8 +84,12 @@ class Scanner {
 			if ($task->getContentHash() !== $hash) {
 				$task->setContentHash($hash);
 				// Content changed: the old answer may be stale, so queue it again — but
-				// keep the previous title until the new analysis lands.
-				$task->setStatus(Task::STATUS_PENDING);
+				// keep the previous title until the new analysis lands. A task the human
+				// finished in Deck stays finished: re-analysing it would queue it again and
+				// undo that decision.
+				if ($task->getStatus() !== Task::STATUS_DONE) {
+					$task->setStatus(Task::STATUS_PENDING);
+				}
 				$task->setErrorMessage(null);
 				$changed = true;
 			}

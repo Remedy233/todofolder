@@ -177,13 +177,18 @@ class DeckBridge {
 	}
 
 	/**
-	 * Create the card for a task, or update the one created earlier. Returns the card
-	 * id, or null when Deck is unavailable or the workspace has no board configured.
+	 * Create the card for a task, or update the one created earlier.
+	 *
+	 * Returns `cardId` plus whether Deck considers the card finished (moved out of the bound
+	 * column, marked done or archived), or null when Deck is unavailable or the workspace has
+	 * no board configured. The caller turns that flag into the task status: Deck owns
+	 * completion, this app only mirrors it.
 	 *
 	 * @param string[] $tagNames the task's tags; they become Deck labels on this board
+	 * @return array{cardId: int, finished: bool}|null
 	 * @throws \RuntimeException when Deck itself refuses the operation
 	 */
-	public function sync(Task $task, Workspace $workspace, array $tagNames = []): ?int {
+	public function sync(Task $task, Workspace $workspace, array $tagNames = []): ?array {
 		if (!$this->isAvailable()) {
 			return null;
 		}
@@ -201,7 +206,7 @@ class DeckBridge {
 		// request (labels, assignment, attachments are refreshed by the web UI path).
 		$hasSession = $this->userSession->getUser() !== null;
 
-		return $this->asUser($owner, function () use ($task, $workspace, $stackId, $boardId, $owner, $tagNames, $hasSession): ?int {
+		return $this->asUser($owner, function () use ($task, $workspace, $stackId, $boardId, $owner, $tagNames, $hasSession): ?array {
 			/** @var \OCA\Deck\Service\CardService $cardService */
 			$cardService = $hasSession ? Server::get('OCA\Deck\Service\CardService') : null;
 
@@ -216,6 +221,7 @@ class DeckBridge {
 			$color = $this->colorFor($task->getPriority());
 
 			$cardId = null;
+			$finishedByHuman = false;
 			$existingCardId = $task->getDeckCardId();
 			if ($existingCardId !== null) {
 				try {
@@ -239,6 +245,7 @@ class DeckBridge {
 							. '), leaving it alone',
 						);
 						$cardId = $existingCardId;
+						$finishedByHuman = true;
 					} elseif ($cardService !== null) {
 						$cardService->update(
 							$existingCardId,
@@ -307,7 +314,7 @@ class DeckBridge {
 				$this->logger->debug('todofolder: background sync of card ' . $cardId . ' skipped labels, assignee and attachments');
 			}
 
-			return $cardId;
+			return ['cardId' => (int)$cardId, 'finished' => $finishedByHuman];
 		});
 	}
 
