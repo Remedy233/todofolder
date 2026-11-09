@@ -144,3 +144,39 @@ DROP TABLE oc_todofolder_task_tags, oc_todofolder_tasks, oc_todofolder_workspace
 DELETE FROM oc_appconfig WHERE appid = 'todofolder';
 DELETE FROM oc_migrations WHERE app = 'todofolder';
 ```
+
+## 应用商店里看到的版本不是最新的
+
+Nextcloud 里的「应用」页面并不是实时查商店的，中间有三层缓存，任何一层没刷新，看到的就是旧版本号：
+
+1. **抓取超时**：商店的索引 `/api/v1/apps.json` 会 302 到 `garm2.nextcloud.com`，未压缩约 14 MB，慢的时候要 3–5 分钟。Nextcloud 默认 `appstore-timeout=120` 秒，超时就放弃，并在 5 分钟内不再重试——于是一直显示上一次抓到的列表（刚发布时就是旧版本号）。
+2. **商店自己的索引**：`garm2` 上的索引是定时生成的（`Last-Modified` 可见），并且带 `Cache-Control: max-age=14400`。商店网页读数据库，索引读快照，所以网页先更新、索引最多晚几小时。
+3. **Nextcloud 本地缓存**：索引落在 `data/appdata_*/appstore/apps.json`，之后靠 ETag 协商。
+
+强制刷新的做法（在 Nextcloud 主机上执行）：
+
+```bash
+# 1. 给足超时，清掉失败标记
+occ config:app:set settings appstore-timeout --value=600
+occ config:app:delete settings appstore-fetcher-lastFailure
+
+# 2. 触发一次真实抓取（首次约 3–5 分钟，看网络）
+occ app:update --all --showonly
+
+# 3. 看结果：appdata 下应出现新的 apps.json
+ls -l data/appdata_*/appstore/apps.json
+```
+
+刷新后打开「应用」页面即可看到当前商店索引里的版本。
+
+如果想让抓取更快、更稳，可以跳过 302，直接把商店地址指到镜像：
+
+```bash
+occ config:system:set appstoreurl --value="https://garm2.nextcloud.com/api/v1"
+```
+
+需要某个只发在 nightly 通道的版本时，加 `--allow-unstable`：
+
+```bash
+occ app:update --all --allow-unstable
+```
