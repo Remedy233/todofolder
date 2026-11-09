@@ -4,9 +4,27 @@ All notable changes to TodoFolder are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.1] - 2026-11-03
+## [Unreleased]
 
-First public release. Published as **0.0.1** on purpose: the store treats the version as
+### Fixed
+
+- **A finished Deck card no longer comes back.** The sync used to pass the bound stack id and
+  order `0` on every run, so a card a human had dragged to *Done* (or marked done, or
+  archived) was pulled back to the todo column and reopened by the next scan or re-analysis.
+  Deck is now the source of truth for placement and completion: a card is refreshed only
+  while it still sits in the column this app put it in and is neither done nor archived;
+  everything else is left untouched (and logged).
+- **Card position is preserved.** Refreshing an unchanged card keeps its `order` instead of
+  moving it to the top of the column.
+- **Background and occ runs can write to Deck again.** `occ todofolder:analyze` and the
+  background job run without a user session, and Deck's services capture the acting user when
+  they are constructed, so every write was refused with *Permission denied*. Those paths now
+  write through Deck's mappers; labels, assignee and attachments are still refreshed by the
+  web-triggered path.
+## [0.0.1] - 2026-11-09
+
+First public release, published to the Nextcloud app store on 2026-11-09
+(<https://apps.nextcloud.com/apps/todofolder>). Published as **0.0.1** on purpose: the store treats the version as
 Semantic Versioning, and 0.x is the honest signal for "usable, still moving".
 
 ### Changed

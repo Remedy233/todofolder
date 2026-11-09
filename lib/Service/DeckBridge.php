@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\TodoFolder\Service;
 
+use OCA\Deck\Db\Card;
+use OCA\Deck\Db\CardMapper;
 use OCA\TodoFolder\Db\Task;
 use OCA\TodoFolder\Db\Workspace;
 use OCP\Files\File;
@@ -192,9 +194,16 @@ class DeckBridge {
 		}
 
 		$owner = $workspace->getUserId();
-		return $this->asUser($owner, function () use ($task, $workspace, $stackId, $boardId, $owner, $tagNames): ?int {
+		// Deck's services capture the acting user when they are constructed, which a
+		// background job or an occ run cannot influence: there is no session at all, so
+		// every service call is refused with "Permission denied". Those code paths write
+		// through the mappers instead and skip the extras that only make sense in a
+		// request (labels, assignment, attachments are refreshed by the web UI path).
+		$hasSession = $this->userSession->getUser() !== null;
+
+		return $this->asUser($owner, function () use ($task, $workspace, $stackId, $boardId, $owner, $tagNames, $hasSession): ?int {
 			/** @var \OCA\Deck\Service\CardService $cardService */
-			$cardService = Server::get('OCA\Deck\Service\CardService');
+			$cardService = $hasSession ? Server::get('OCA\Deck\Service\CardService') : null;
 
 			$title = $task->getTitle();
 			if ($title === null || $title === '') {
@@ -210,22 +219,55 @@ class DeckBridge {
 			$existingCardId = $task->getDeckCardId();
 			if ($existingCardId !== null) {
 				try {
-					$cardService->find($existingCardId);
-					$cardService->update(
-						$existingCardId,
-						$title,
-						(int)$stackId,
-						'plain',
-						$owner,
-						$description,
-						0,
-						$due,
-						null,
-						null,
-						null,
-						$start,
-					);
-					$cardId = $existingCardId;
+					$card = $cardService !== null
+						? $cardService->find($existingCardId)
+						: Server::get(CardMapper::class)->find($existingCardId, false);
+
+					// Deck owns placement and completion: once a card leaves the bound
+					// stack — dragged to "Done", archived, marked done — a later scan or
+					// re-analysis must not drag it back. Only cards that are still where
+					// this app put them get refreshed.
+					$movedAway = (int)$card->getStackId() !== (int)$stackId;
+					$done = $card->getDone();
+					$finished = $movedAway || $card->getArchived() || $done !== null;
+					if ($finished) {
+						$this->logger->info(
+							'todofolder: deck card ' . $existingCardId . ' is finished or moved '
+							. '(stack ' . (int)$card->getStackId() . ' vs bound ' . (int)$stackId
+							. ', done=' . ($done === null ? 'no' : $done->format('c'))
+							. ', archived=' . ($card->getArchived() ? 'yes' : 'no')
+							. '), leaving it alone',
+						);
+						$cardId = $existingCardId;
+					} elseif ($cardService !== null) {
+						$cardService->update(
+							$existingCardId,
+							$title,
+							(int)$card->getStackId(),
+							'plain',
+							$owner,
+							$description,
+							(int)$card->getOrder(),
+							$due,
+							(int)$card->getDeletedAt(),
+							$card->getArchived(),
+							// Deck's `done` is an OptionalNullableValue; null means "leave it
+							// as it is", which is exactly what a refresh should do.
+							null,
+							$start,
+						);
+						$cardId = $existingCardId;
+					} else {
+						$card->setTitle($title);
+						$card->setDescription($description);
+						$card->setDuedate($due);
+						$card->setStartdate($start);
+						$card->setColor($color);
+						$card->setLastEditor($owner);
+						$card->setLastModified(time());
+						Server::get(CardMapper::class)->update($card);
+						$cardId = $existingCardId;
+					}
 				} catch (\Throwable $e) {
 					// The card was deleted in Deck: fall through and create a new one.
 					$this->logger->info('todofolder: deck card ' . $existingCardId . ' is gone (' . $e->getMessage() . '), recreating');
@@ -233,14 +275,37 @@ class DeckBridge {
 			}
 
 			if ($cardId === null) {
-				$card = $cardService->create($title, (int)$stackId, 'plain', 0, $owner, $description, $due, $start, $color);
-				$cardId = (int)$card->getId();
+				if ($cardService !== null) {
+					$card = $cardService->create($title, (int)$stackId, 'plain', 0, $owner, $description, $due, $start, $color);
+					$cardId = (int)$card->getId();
+				} else {
+					$card = new Card();
+					$card->setTitle($title);
+					$card->setDescription($description);
+					$card->setStackId((int)$stackId);
+					$card->setType('plain');
+					$card->setOwner($owner);
+					$card->setLastEditor($owner);
+					$card->setOrder(0);
+					$card->setArchived(false);
+					$card->setDeletedAt(0);
+					$card->setDuedate($due);
+					$card->setStartdate($start);
+					$card->setColor($color);
+					$cardId = (int)Server::get(CardMapper::class)->insert($card)->getId();
+				}
 			}
 
-			// Deck-native fields beyond title/description/due/colour.
-			$this->syncLabels($cardId, (int)$boardId, $tagNames);
-			$this->assignOwner($cardId, $owner);
-			$this->attachMaterials($cardId, $task, $workspace, $owner);
+			// Deck-native fields beyond title/description/due/colour. They go through Deck's
+			// services, which only work with a request session; a background run leaves
+			// them for the next web-triggered sync instead of failing the whole task.
+			if ($cardService !== null) {
+				$this->syncLabels($cardId, (int)$boardId, $tagNames);
+				$this->assignOwner($cardId, $owner);
+				$this->attachMaterials($cardId, $task, $workspace, $owner);
+			} else {
+				$this->logger->debug('todofolder: background sync of card ' . $cardId . ' skipped labels, assignee and attachments');
+			}
 
 			return $cardId;
 		});
@@ -470,6 +535,11 @@ class DeckBridge {
 	/**
 	 * Run $fn with $userId as the session user, then restore whatever was there.
 	 *
+	 * Deck resolves the acting user from the session when its services are built, so a
+	 * background job or an occ command — where there is no session at all — must switch the
+	 * user here, before Deck's card service is resolved, or every write is refused with
+	 * "Permission denied".
+	 *
 	 * @template T
 	 * @param callable(): T $fn
 	 * @return T|null
@@ -481,10 +551,20 @@ class DeckBridge {
 			return null;
 		}
 		$previous = $this->userSession->getUser();
+		$previousLegacy = \OC_User::getUser();
 		$this->userSession->setUser($user);
+		// Deck still reads the legacy global in a few permission paths, and its file
+		// operations need the mount of the acting user.
+		\OC_User::setUserId($userId);
+		\OC_Util::setupFS($userId);
 		try {
 			return $fn();
 		} finally {
+			\OC_Util::tearDownFS();
+			if ($previousLegacy !== false && $previousLegacy !== '') {
+				\OC_Util::setupFS($previousLegacy);
+			}
+			\OC_User::setUserId($previousLegacy === false ? '' : $previousLegacy);
 			$this->userSession->setUser($previous);
 		}
 	}

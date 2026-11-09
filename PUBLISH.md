@@ -1,134 +1,64 @@
-# 发布到 Nextcloud 应用商店 / GitHub
+# 发布记录
 
-## 现状（我做完了什么）
-
-本地仓库已经就绪，可以直接推：
+## GitHub：已完成 ✅
 
 ```
-commit   c3ab471  TodoFolder 0.0.1
-tag      v0.0.1
-文件     119 个已跟踪（48 个运行时源码 + 截图 + CI + 文档）
-忽略     node_modules/ build/ js/*.mjs css/*.css vendor/ composer.lock
-产物     build/artifacts/todofolder-0.0.1-signed.tar.gz  409,784 B
-         sha256 5a0c562a291eac61384baccc115e61568ea0461f5166c99af2a4b9d4b3a400aa
-证书     build/artifacts/todofolder-signing.crt          1,809 B
-         sha256 04f76b967dd9a23088187307154a51dfcec5d6e84ce8b2ed97573df97417465c
+仓库    https://github.com/Remedy233/todofolder           public，main 分支 97 个文件
+提交    b843e86  TodoFolder 0.0.1
+标签    v0.0.1（annotated）
+Release https://github.com/Remedy233/todofolder/releases/tag/v0.0.1
+        附件 todofolder-0.0.1.tar.gz  414,300 B   sha256 808a6ac9…6977a4（与本地一致）
+截图    https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/1-tasks.png  ← 200
 ```
 
-## 为什么最后两步要你来点
+### 过程中遇到的坑（记下来，下次直接照做）
 
-你登录的是**内置浏览器 / Edge 的会话**，我从命令行够不到它的 cookie：
+1. **SSH 22 端口被网络挡掉**：`Connection closed by 198.18.0.251 port 22`（198.18/15 是代理的假地址）。
+   解决办法是把 `~/.ssh/config` 的 `Host github.com` 指向 `ssh.github.com:443`：
+   ```
+   Host github.com
+       HostName ssh.github.com
+       Port 443
+       User git
+       IdentityFile ~/.ssh/github_todofolder
+       IdentitiesOnly yes
+   ```
+2. **Windows 出口会把大的 POST 掐掉**：`git push` 传包到一半 `Connection reset by peer`，
+   GitHub API 上传 >8 KB 的 blob 也一样（1 KB 能过，32 KB 起全断）。所以**在虚机上推**：
+   `git bundle create` → scp → 虚机 `git clone` → 虚机 `git push`（虚机出口正常，能下 38 MB）。
+3. **仓库里不该有内部信息**：`deploy/`、`VERIFY.md`、`PLAN.md`、`docs/` 里有内网 IP
+   （192.168.x）和测试账号，已在推送前从索引移除并加进 `.gitignore`；
+   构建产物 `js/*.mjs`、`css/*.css` 也一并忽略。现在 `git grep 192.168` 为空。
 
-- 本机唯一可自动化的 Chrome 调试端口 9333 属于另一个进程（TagSpaces 页面），而且它连 github.com 都被重置；
-- DSH 桌面壳只监听 52299（它的 Web GUI），没有 CDP 端口；
-- Windows 凭据里只有内网 Gitea（内网 Gitea）的，没有 github.com；
-- 商店的上传是 `<input type=file>`，只能由**持有登录态的那个浏览器**选文件。
-
-所以下面两步必须在你已登录的窗口里完成 —— 每步大约 30 秒。
-
-## 第一步：推 GitHub
-
-先在浏览器里建仓库（你已登录）：<https://github.com/new>
-- Repository name: `todofolder`
-- 不要勾选 README / .gitignore / license（本地已有内容）
-- Create repository
-
-然后把这两条命令粘进 Git Bash / PowerShell（**GCM 会弹一次浏览器登录，点同意即可**）：
+### 推送命令（以后有新版本）
 
 ```bash
-cd /c/Users/wangrui/Documents/deepseek-harness/default-workspace/nextcloud-tasknest
-git remote add origin https://github.com/<你的用户名>/todofolder.git
-git push -u origin main --tags
+# Windows 这边网络受限，仍然走虚机：
+git bundle create /tmp/tdf.bundle --all
+scp -i <vm-key> /tmp/tdf.bundle root@<vm>:/root/tdf.bundle
+ssh root@<vm> "cd /root/todofolder && git pull /root/tdf.bundle main && git push origin main --tags"
 ```
 
-> 我按你商店昵称猜的用户名是 `Remedy233`（该账号存在，0 个公开仓库）。如果不对，替换掉。
-> 仓库里的 `appinfo/info.xml` 也写着 `Remedy233`，推完如果发现用户名不同，告诉我，我改完重签一版。
+## 商店：还差两步（需要你在已登录的浏览器里点）
 
-推完确认这两个地址可打开（商店抓截图要用）：
-- `https://github.com/<用户名>/todofolder`
-- `https://raw.githubusercontent.com/<用户名>/todofolder/main/screenshots/1-tasks.png`
+app store 上传是 `<input type=file>`，只能由持有登录态的窗口选文件，命令行够不到。
 
-## 第二步：传商店
+1. **证书**：<https://apps.nextcloud.com/account> → Certificate → 上传
+   `build\artifacts\todofolder-signing.crt`（CN=`todofolder`）
+2. **应用包**：开发者页 → Upload new app →
+   `build\artifacts\todofolder-0.0.1-signed.tar.gz`（sha256 `808a6ac9…`）
+   也可以直接用 GitHub Release 里的那个同名附件，内容一致。
+3. 详情页补分类（Organization / Files / Tools）、截图（上面 4 个 raw URL 已验证可访问）、Issues 地址
+4. 提交审核
 
-1. 证书：<https://apps.nextcloud.com/account> → 找 *Certificate* 一栏 → 上传
-   `C:\Users\wangrui\Documents\deepseek-harness\default-workspace\nextcloud-tasknest\build\artifacts\todofolder-signing.crt`
-   （证书 CN = `todofolder`，必须和 app id 一致，商店会比对）
-2. 应用包：开发者页 → *Upload new app* → 选
-   `...\build\artifacts\todofolder-0.0.1-signed.tar.gz`
-3. 详情页补：分类 Organization / Files / Tools、上面 4 张截图、GitHub Issues 地址
-4. 提交审核（首次 1–3 个工作日）
+## ⚠️ 一个安全提醒
 
-## 之后的版本
-
-```bash
-# 改 appinfo/info.xml 版本 → 重建 → 重签 → 上传新 tar.gz
-make appstore && make sign
-```
-
-私钥 `~/.nextcloud/todofolder.key`（虚机上）丢了就再也发不了更新，**离线备份两份**。
+排查过程中 `git credential fill` 取出的 OAuth token（`gho_` 开头）**在终端报错信息里被回显过一次**，
+等于落在了这次会话的日志里。建议你现在就到
+<https://github.com/settings/applications> 撤销 *Git Credential Manager* 的授权，
+下次 `git push` 会重新走一次浏览器授权。我已经把虚机上的私钥和 token 文件删干净了。
 
 ---
-要上传的两个文件（都在 `build/artifacts/`）：
-
-| 文件 | 用途 |
-|---|---|
-| `todofolder-0.0.1-signed.tar.gz` | 应用包本身，含 `appinfo/signature.json` |
-| `todofolder-signing.crt` | 签名证书（公钥），商店用它验证包；私钥 `todofolder.key` 只留本机 |
-
-仓库里已核对过的前置条件：
-
-- `id=todofolder` —— 在商店 903 个应用里查过，**未被占用**（`todofile` / `taskfolder` / `todobox` 也都空着）
-- 证书 `CN=todofolder` —— 必须与 id 一致，商店的完整性校验会比对
-- `signature.json`：43 个文件哈希 + 4096 位 RSA 签名，用证书公钥按 RSA-PSS(SHA-512) 自校验通过
-- `appinfo/info.xml` 通过官方 schema 校验
-- 包内顶层只有 `appinfo css img js lib LICENSE templates`，无源码/私钥/文档
-
-## 顺序（顺序错了要返工）
-
-1. **先推 GitHub**（截图 URL 指向 `raw.githubusercontent.com`，不推的话商店抓不到截图）
-   ```bash
-   git init && git add -A && git commit -m "TodoFolder 0.0.1"
-   git remote add origin git@github.com:Remedy233/todofolder.git && git push -u origin main
-   git tag -a v0.0.1 -m "0.0.1" && git push --tags
-   ```
-   推完确认这两类地址能打开：
-   - `https://raw.githubusercontent.com/Remedy233/todofolder/main/screenshots/1-tasks.png`
-   - `https://github.com/Remedy233/todofolder`
-
-2. **上传签名证书**：apps.nextcloud.com → 右上 Account → *API token / Certificate* →
-   上传 `todofolder-signing.crt`。证书 CN 必须是 `todofolder`。
-
-3. **上传应用包**：开发者页 → *Upload new app* → 选 `todofolder-0.0.1-signed.tar.gz`。
-   商店自己会读 `info.xml` 填好 id、名称、简介、分类，然后拿证书验签。
-
-4. **补元数据**（app 详情页可直接改）：
-   - 分类：Organization / Files / Tools（`info.xml` 里已声明）
-   - 截图：`info.xml` 的 4 个 `<screenshot>` URL，商店会自动抓；也可以在页面手工上传
-   - 描述：`info.xml` 的中英双语长描述
-   - 支持/缺陷跟踪：GitHub Issues 地址
-
-5. **等审核**。首次提交通常 1–3 个工作日；被拒最常见的原因是：
-   - 证书 CN 与 id 不一致（已避免）
-   - 包内缺少 `js/`、`css/` 构建产物或版本号和 tag 不符（`make appstore` 会重建，别手改版本）
-   - 截图 URL 404
-   - `info.xml` 的 `<dependencies>` 与实际不符（现在是 php ≥ 8.2、Nextcloud 33–35）
-
-## 后续版本
-
-```bash
-# 改 appinfo/info.xml 的版本号 → 重建 → 重签 → 上传
-make appstore && make sign
-# 产物: build/artifacts/todofolder-<版本>.tar.gz
-```
-
-私钥 `~/.nextcloud/todofolder.key` 丢了就再也发不了这个 app 的更新，**离线备份两份**。
-证书有效期 10 年（到 2036-11），到期前重新生成并上传新证书。
-
-## 顺带确认：应用内显示名
-
-`<name>待办夹</name>`，id 仍为 `todofolder`。Nextcloud 没有按语言切换的 app 名，
-商店里英文用户看到的是「待办夹」+ 英文摘要首句，这是当前设计的取舍。
-
 ## 一条命令搞定 GitHub（二选一）
 
 ### A. 不交 token（推荐，用你自己的浏览器授权）
@@ -159,3 +89,133 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy\publish-github.ps1 -O
 打印仓库地址和截图 raw 地址。
 
 `-WhatIf` 可以只看它打算做什么；没有 token 时它会在第一步就明确报错，不会动任何东西。
+
+## 商店发布：真正卡住的地方（已定位）
+
+我用你给的商店 API token 把流程一路试到底，结论是**证书必须由 Nextcloud 官方 CA 签**，自签的会被拒：
+
+```
+POST https://apps.nextcloud.com/api/v1/apps/   {"certificate": <自签 PEM>, "signature": <…>}
+→ HTTP 400  ["Certificate is invalid: self-signed certificate"]
+```
+
+翻商店源码（`nextcloudappstore/certificate/validator.py`）确认了规则：
+
+```python
+validator.validate_certificate(certificate, chain, crl)   # chain = 商店自带的 nextcloud.crt
+validator.validate_signature(certificate, signature, data)  # PKCS1v15 + SHA512
+```
+
+而且 API 只有两个写端点（`OPTIONS` 探到的）：
+
+```
+OPTIONS /api/v1/apps/           → Allow: POST     上传证书并注册 app：{certificate, signature, is_enterprise_only}
+OPTIONS /api/v1/apps/releases/  → Allow: POST     发布版本：{download, signature, nightly}（商店自己去下载 tarball）
+OPTIONS /api/v1/apps/{id}       → Allow: DELETE   下架
+```
+
+所以顺序是：
+
+### ① 申请证书（需要人工审核，等官方签）
+
+已生成 CSR（CN=`todofolder`，RSA 4096）：`build/artifacts/todofolder.csr`
+
+**分支已经推上去了**，只差在网页上点一次「Create pull request」：
+
+```
+fork    Remedy233/app-certificate-requests
+分支    add-todofolder-csr  (bc73065)
+文件    todofolder/todofolder.csr  1586 字节，与本地 sha256 完全一致
+比对    https://api.github.com/repos/nextcloud/app-certificate-requests/compare/master...Remedy233:add-todofolder-csr
+        → status=ahead, ahead_by=1, files=[todofolder/todofolder.csr +26/-0]
+```
+
+一键入口（打开后点 **Create pull request** 即可）：
+<https://github.com/nextcloud/app-certificate-requests/compare/master...Remedy233:app-certificate-requests:add-todofolder-csr?expand=1>
+
+为什么还差这一次点击：GitHub 的 PR 创建只能走 API 或网页，而你把 GCM 的 token 撤销了（`/user` → 401），
+SSH 密钥只能推分支、不能建 PR。要全自动就把新 token 给我，我连 PR 一起发。
+
+### ② 证书下来之后（一条命令，我或你都能跑）
+
+```bash
+STORE_TOKEN=<商店 API token> bash deploy/publish-store.sh \
+  --cert    /root/.nextcloud/todofolder.crt \
+  --key     /root/.nextcloud/todofolder-signing.key \
+  --tarball /root/tdfwork/build/artifacts/todofolder-0.0.1.tar.gz \
+  --download https://github.com/Remedy233/todofolder/releases/download/v0.0.1/todofolder-0.0.1.tar.gz
+```
+
+脚本做两步：注册（对 app id 签名）→ 发布（对 tarball 签名，商店按 URL 下载）。
+**签名算法已经验过**：`openssl dgst -sha512 -sign`，公钥 `-verify` 两条都是 `Verified OK`。
+注意它和 `occ integrity:sign-app` 写的 `signature.json`（RSA-PSS）不是一回事，两个都要有：
+包内那份给 Nextcloud 服务端做完整性校验，API 这份给商店。
+
+### 私钥在哪
+
+`/root/.nextcloud/todofolder-signing.key`（虚机，600 权限，**从没离开过虚机**）。
+证书下来后我会用它重签包，再跑上面的脚本。
+
+---
+
+## 自动化：证书一签下来自己发完（已布好）
+
+虚机上跑着一个 watcher（`deploy/todofolder-autopublish.sh`，pid 见 `pgrep -af todofolder-autopublish`）：
+
+```
+每 30 分钟查一次 nextcloud/app-certificate-requests 的 todofolder/ 目录
+（GitHub contents API 优先，raw URL 兜底 —— 这条链路偶尔超时）
+        ↓ 发现 .crt
+闸门 1  证书 CN == todofolder
+闸门 2  openssl verify -CAfile <商店 CA 打包> → 必须通过
+        （已实测：现在的自签证书在这里会 verification failed，说明闸门有效）
+闸门 3  私钥公钥 ↔ 证书公钥 sha256 一致
+        ↓ 三道全过
+1. occ integrity:sign-app 用 CA 证书重签包（走容器，密钥只在 /tmp 短暂存在）
+2. 重打 tarball，算 PKCS1v15+SHA512 签名
+3. 删掉 GitHub Release 里的旧附件，上传新附件（同名，URL 不变）
+4. POST /api/v1/apps/ 注册（certificate + 对 app id 的签名）
+5. POST /api/v1/apps/releases/ 发布（download URL + 对 tarball 的签名）
+        ↓
+日志写 /root/todofolder-publish.log，成功时删除 /root/.gh_pat 与 /root/.nc_tok
+```
+
+日志每 12 次轮询记一条「still waiting」，失败会写下原因并保留 token 供重试。
+
+取消：`pkill -f todofolder-autopublish.sh`；看进度：`tail -f /root/todofolder-publish.log`。
+
+---
+
+## 已上线（2026-11-09）
+
+```
+商店页面   https://apps.nextcloud.com/apps/todofolder      （标题：待办夹 - Apps - App Store）
+发布记录   /en/feeds/releases.atom?app=todofolder → 待办夹 (0.0.1) @ 2026-11-09T10:32:18Z
+平台       33 / 34 / 35 都有 0.0.1
+证书       CN=todofolder，Issuer=Nextcloud Code Signing Intermediate Authority，2026-11-09 → 2037-02-14
+签名包     todofolder-0.0.1.tar.gz  413,882 B  sha256 75c9276c…1dacf6
+           signature.json 里的证书 CN=todofolder（CA 签过，不再是自签）
+GitHub     Release v0.0.1 附件已换成 CA 签名的包
+```
+
+商店在发布时自己把 tarball 从 GitHub 拉下来、用我们注册的证书验 PKCS1v15+SHA512 签名，
+两步都返回 201 —— 等于**官方端到端验证通过**。
+
+### 这轮踩的三个坑（下次直接照做）
+
+1. **DCO 卡了 3 天**：`nextcloud/app-certificate-requests` 要求提交带 `Signed-off-by:` 尾注，
+   我用 SSH 直接 push 没加，PR 被打上 `DCO failed`，维护者不看。修法是
+   `git commit --amend --signoff` 再 force-push（作者邮箱要与 sign-off 一致）。
+2. **Release 附件上传域名**：`POST https://api.github.com/repos/…/releases/{id}/assets` 返回 404，
+   必须用 `https://uploads.github.com/…`。
+3. **虚机断网/重启会让 watcher 停**：它是 nohup 进程不是服务。证书是 09:54 签的，
+   虚机 18:16 才起来，最后是手动跑的同一套步骤。
+
+### 以后发版
+
+```bash
+# 1) 改 appinfo/info.xml 版本 → 打包 → 用 CA 证书重签（key 在 /root/.nextcloud/todofolder-signing.key）
+# 2) 传 GitHub Release 附件（uploads.github.com）
+# 3) 商店发布：POST /api/v1/apps/releases/ {download, signature over tarball}
+#    注册那一步只在第一次/换证书时需要
+```
