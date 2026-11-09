@@ -4,6 +4,14 @@ All notable changes to TodoFolder are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.3] - 2026-11-09
+
+### Changed
+
+- **Refreshed app store screenshots.** The images on the store page still showed the old name and
+  the pre-0.0.2 interface; they now show the current app: the task list with a completed task, the
+  task dialog, the workspace settings and the admin settings. They also moved to
+  `screenshots/app/`, because the store's image cache keeps the old picture for a URL forever.
 ## [0.0.2] - 2026-11-09
 
 ### Added
