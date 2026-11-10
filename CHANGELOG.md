@@ -8,6 +8,15 @@ All notable changes to TodoFolder are documented here. The format follows
 
 ### Added
 
+- **Task actions in the list.** Every task offers start, finish, ignore, restore, re-analyse, edit,
+  push to Deck, open the folder, jump to the card and delete the record. Finishing opens a dialog
+  that preselects the model's category, so the card is filed in one step.
+- **Filter, search and sort** on top of the list: state, keyword over title/folder/summary/tags,
+  and ordering by due date, priority or last change, with overdue tasks marked red.
+- **Classification settings in the workspace dialog**: inbox column, classify switch, when to
+  classify, where a finished card goes and the Deck reconcile interval.
+- **A renamed folder keeps its task.** The scanner falls back to the folder's fileid, so renaming
+  or moving a directory through Nextcloud updates the task instead of creating a second one.
 - **Deck columns as categories.** A workspace can let the model pick a category column while it
   analyses a task. The suggestion is stored (`suggested_stack_*`) and applied when the task is
   marked done, so the todo column stays an inbox and no second model call is needed.
