@@ -68,22 +68,6 @@
 			</div>
 		</div>
 
-			<div v-if="tasks.length" class="todofolder-filters">
-				<select v-model="statusFilter" class="todofolder-native-select" :aria-label="t('Status')">
-					<option value="all">{{ t('All') }}</option>
-					<option value="ready">{{ t('Ready') }}</option>
-					<option value="in_progress">{{ t('In progress') }}</option>
-					<option value="done">{{ t('Completed') }}</option>
-					<option value="error">{{ t('Error') }}</option>
-					<option value="ignored">{{ t('Ignored') }}</option>
-				</select>
-				<input v-model="keyword" type="search" class="todofolder-filter-search" :placeholder="t('Search tasks')" :aria-label="t('Search tasks')">
-				<select v-model="sortBy" class="todofolder-native-select" :aria-label="t('Sort by')">
-					<option value="due">{{ t('Due date') }}</option>
-					<option value="priority">{{ t('Priority') }}</option>
-					<option value="updated">{{ t('Recently changed') }}</option>
-				</select>
-			</div>
 		<NcEmptyContent v-if="!current"
 			:name="t('No workspaces yet')"
 			:description="t('Create a workspace that points at the folder holding your tasks: every subfolder becomes one task.')">
@@ -116,9 +100,9 @@
 			</NcEmptyContent>
 
 			<ul v-else class="todofolder-tasks">
-				<NcListItem v-for="task in filteredTasks"
+				<NcListItem v-for="task in tasks"
 					:key="task.id"
-					:class="{ 'todofolder-task--done': task.status === 'done', 'todofolder-task--overdue': isOverdue(task) }"
+					:class="{ 'todofolder-task--done': task.status === 'done' }"
 					:name="task.title || task.folderName"
 					:details="task.dueDate ? t('Due {date}', { date: task.dueDate }) : ''"
 					:force-display-actions="true"
@@ -955,11 +939,6 @@ export default {
 	text-decoration: line-through;
 	text-decoration-thickness: 1px;
 }
-/* 筛选条与逾期标记：NcListItem 的内部结构没有 scope id，规则放在非 scoped 块里 */
-.todofolder-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 4px 16px 8px; }
-.todofolder-filters input { flex: 1 1 12em; min-width: 8em; }
-.todofolder-task--overdue .list-item-content__name { color: var(--color-error); }
-
 </style>
 
 <style scoped>
