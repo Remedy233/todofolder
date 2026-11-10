@@ -133,7 +133,7 @@
 							<template #icon><NcIconSvgWrapper :svg="icons.play" /></template>
 							{{ t('Start') }}
 						</NcActionButton>
-						<NcActionButton v-if="canFinish(task)" :disabled="busy" @click.stop="lifecycle(task, 'finish')">
+						<NcActionButton v-if="canFinish(task)" :disabled="busy" @click.stop="openFinish(task)">
 							<template #icon><NcIconSvgWrapper :svg="icons.check" /></template>
 							{{ t('Finish') }}
 						</NcActionButton>
@@ -253,6 +253,9 @@
 		size="small"
 		@update:open="finishTask = null">
 		<p>{{ t('The card moves to the category you pick here.') }}</p>
+		<select v-model.number="finishStackId" class="todofolder-native-select">
+			<option v-for="stack in boardStacks" :key="stack.id" :value="stack.id">{{ stack.title }}</option>
+		</select>
 		<template #actions>
 			<NcDialogButton :label="t('Cancel')" :callback="() => { finishTask = null }" />
 		</template>
@@ -364,6 +367,8 @@ export default {
 			error: '',
 			confirmState: { open: false, title: '', message: '', confirmLabel: '删除', resolve: null },
 			finishTask: null,
+			finishStackId: null,
+			boardStacks: [],
 			workspaceDialog: false,
 			settingsDialog: false,
 			taskDialog: false,
@@ -464,9 +469,19 @@ export default {
 				this.busy = false
 			}
 		},
-		openFinish(task) {
+		async openFinish(task) {
 			this.finishTask = task
 			this.finishStackId = task.suggestedStackId ?? null
+			this.boardStacks = []
+			const boardId = this.current?.deckBoardId
+			if (boardId) {
+				try {
+					const { data } = await axios.get(generateUrl('/apps/todofolder/api/deck/boards/' + boardId + '/stacks'))
+					this.boardStacks = Array.isArray(data) ? data : []
+				} catch (e) {
+					this.boardStacks = []
+				}
+			}
 		},
 		async confirmFinish() {
 			if (!this.finishTask) {
