@@ -367,6 +367,16 @@ class TaskController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/workspaces/{id}/reclassify')]
+	public function reclassify(int $id): JSONResponse {
+		try {
+			$workspace = $this->workspaces->getForUser($id, (string)$this->userId, true);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => $this->l10n->t('Workspace not found')], Http::STATUS_NOT_FOUND);
+		}
+		return new JSONResponse($this->analysis->reclassify($workspace));
+	}
+	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/workspaces/{id}/decksetup')]
 	public function deckSetup(int $id, bool $syncTasks = true): JSONResponse {
 		try {

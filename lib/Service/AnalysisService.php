@@ -317,6 +317,42 @@ PROMPT;
 		return null;
 	}
 
+	/**
+	 * Re-resolve stored category names against the board as it is now. Columns get renamed,
+	 * moved and deleted; this fixes the suggestions without spending a model call, which is
+	 * what "the columns changed, fix it" should cost.
+	 *
+	 * @return array{updated: int, cleared: int}
+	 */
+	public function reclassify(Workspace $workspace): array {
+		$updated = 0;
+		$cleared = 0;
+		foreach ($this->tasks->findByWorkspace((int)$workspace->getId()) as $task) {
+			$name = $task->getSuggestedStackName();
+			if ($name === null || $name === '') {
+				continue;
+			}
+			$resolved = $this->resolveCategory($workspace, $name);
+			if ($resolved === null) {
+				if ($task->getSuggestedStackId() !== null) {
+					$task->setSuggestedStackId(null);
+					$task->setStackSource('fallback');
+					$task->setUpdatedAt(time());
+					$this->tasks->update($task);
+					$cleared++;
+				}
+				continue;
+			}
+			if ($task->getSuggestedStackId() !== $resolved['id'] || $task->getSuggestedStackName() !== $resolved['name']) {
+				$task->setSuggestedStackId($resolved['id']);
+				$task->setSuggestedStackName($resolved['name']);
+				$task->setUpdatedAt(time());
+				$this->tasks->update($task);
+				$updated++;
+			}
+		}
+		return ['updated' => $updated, 'cleared' => $cleared];
+	}
 	public function syncDeck(Task $task, Workspace $workspace): Task {
 		try {
 			// The tags become Deck labels; read them from the table rather than from the
