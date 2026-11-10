@@ -231,6 +231,35 @@
 			<NcCheckboxRadioSwitch v-model="settings.scanEnabled" type="switch">
 				{{ t('Allow scheduled background scans') }}
 			</NcCheckboxRadioSwitch>
+
+			<hr class="todofolder-form__sep">
+			<NcCheckboxRadioSwitch v-model="settings.deckClassify" type="switch">
+				{{ t('Let the model pick a category column') }}
+			</NcCheckboxRadioSwitch>
+			<div class="todofolder-form__field">
+				<label class="todofolder-form__label">{{ t('Inbox column (new cards)') }}</label>
+				<NcSelect v-model="settings.deckInboxStackId" :options="stackOptions" :clearable="true" :aria-label="t('Inbox column (new cards)')" />
+			</div>
+			<div class="todofolder-form__field">
+				<label class="todofolder-form__label">{{ t('When to classify') }}</label>
+				<select v-model="settings.deckClassifyTiming" class="todofolder-native-select">
+					<option value="on_done">{{ t('When I mark it done') }}</option>
+					<option value="on_create">{{ t('When the card is created') }}</option>
+					<option value="manual">{{ t('Only manually') }}</option>
+				</select>
+			</div>
+			<div class="todofolder-form__field">
+				<label class="todofolder-form__label">{{ t('Where a finished card goes') }}</label>
+				<select v-model="settings.deckDoneTarget" class="todofolder-native-select">
+					<option value="category">{{ t('Into its category column') }}</option>
+					<option value="fixed">{{ t('Into one fixed done column') }}</option>
+					<option value="in_place">{{ t('Stay in place') }}</option>
+				</select>
+			</div>
+			<div class="todofolder-form__field">
+				<label class="todofolder-form__label">{{ t('Reconcile with Deck every (minutes)') }}</label>
+				<NcTextField v-model="settings.deckReconcileInterval" type="number" :label="t('Reconcile interval')" />
+			</div>
 		</div>
 		<template #actions>
 			<NcDialogButton :label="t('Cancel')" :callback="closeSettingsDialog" />
@@ -677,6 +706,11 @@ export default {
 		openSettingsDialog() {
 			this.settings = {
 				autoDeck: this.current.autoDeck,
+				deckClassify: !!this.current.deckClassify,
+				deckClassifyTiming: this.current.deckClassifyTiming || 'on_done',
+				deckDoneTarget: this.current.deckDoneTarget || 'category',
+				deckInboxStackId: this.current.deckInboxStackId ?? null,
+				deckReconcileInterval: this.current.deckReconcileInterval ?? 15,
 				scanInterval: this.current.scanInterval,
 				scanEnabled: this.current.scanEnabled,
 				deckBoardId: this.current.deckBoardId ?? null,
@@ -785,6 +819,11 @@ export default {
 					method: 'PUT',
 					data: {
 						autoDeck: this.settings.autoDeck,
+						deckClassify: !!this.settings.deckClassify,
+						deckClassifyTiming: this.settings.deckClassifyTiming,
+						deckDoneTarget: this.settings.deckDoneTarget,
+						deckInboxStackId: this.settings.deckInboxStackId ? Number(this.settings.deckInboxStackId) : null,
+						deckReconcileInterval: Number(this.settings.deckReconcileInterval) || 15,
 						scanInterval: Number(this.settings.scanInterval),
 						scanEnabled: this.settings.scanEnabled,
 						deckBoardId: this.settings.deckBoardId,
