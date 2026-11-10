@@ -55,6 +55,19 @@ class Scanner {
 
 			$task = $this->tasks->findByWorkspaceAndPath((int)$workspace->getId(), $path);
 			if ($task === null) {
+				// The folder may simply have been renamed: the same directory keeps its fileid.
+				$sameFolder = $this->tasks->findByWorkspaceAndFileid((int)$workspace->getId(), (int)$taskFolder->getId());
+				if ($sameFolder !== null) {
+					$sameFolder->setFolderPath($path);
+					$sameFolder->setFolderName($taskFolder->getName());
+					$sameFolder->setContentHash($hash);
+					$sameFolder->setUpdatedAt($now);
+					$this->tasks->update($sameFolder);
+					$updated++;
+					continue;
+				}
+			}
+			if ($task === null) {
 				$task = new Task();
 				$task->setWorkspaceId((int)$workspace->getId());
 				$task->setFolderPath($path);

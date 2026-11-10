@@ -65,6 +65,21 @@ class TaskMapper extends QBMapper {
 	/**
 	 * @return Task[]
 	 */
+	/**
+	 * Same folder, new name: a renamed or moved directory comes back with the same fileid, so
+	 * this is how the scanner keeps the task instead of creating a second one.
+	 */
+	public function findByWorkspaceAndFileid(int $workspaceId, int $folderFileid): ?Task {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('workspace_id', $qb->createNamedParameter($workspaceId, \PDO::PARAM_INT)))
+			->andWhere($qb->expr()->eq('folder_fileid', $qb->createNamedParameter($folderFileid, \PDO::PARAM_INT)))
+			->setMaxResults(1);
+		$row = $qb->executeQuery()->fetch();
+		return $row === false ? null : $this->mapRowToEntity($row);
+	}
+
 	public function findPending(int $limit = 10): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
