@@ -133,7 +133,7 @@
 							<template #icon><NcIconSvgWrapper :svg="icons.play" /></template>
 							{{ t('Start') }}
 						</NcActionButton>
-						<NcActionButton v-if="canFinish(task)" :disabled="busy" @click.stop="openFinish(task)">
+						<NcActionButton v-if="canFinish(task)" :disabled="busy" @click.stop="lifecycle(task, 'finish')">
 							<template #icon><NcIconSvgWrapper :svg="icons.check" /></template>
 							{{ t('Finish') }}
 						</NcActionButton>
@@ -516,7 +516,8 @@ export default {
 			return {
 				pending: this.t('Pending'),
 				analyzing: this.t('Analyzing'),
-				ready: this.t('Done'),
+				in_progress: this.t('In progress'),
+				ready: this.t('Ready'),
 				error: this.t('Error'),
 				ignored: this.t('Ignored'),
 				done: this.t('Completed'),
