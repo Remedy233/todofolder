@@ -129,9 +129,37 @@
 							<template #icon><NcIconSvgWrapper :svg="icons.pencil" /></template>
 							{{ t('Edit') }}
 						</NcActionButton>
+						<NcActionButton v-if="canStart(task)" :disabled="busy" @click.stop="lifecycle(task, 'start')">
+							<template #icon><NcIconSvgWrapper :svg="icons.play" /></template>
+							{{ t('Start') }}
+						</NcActionButton>
+						<NcActionButton v-if="canFinish(task)" :disabled="busy" @click.stop="openFinish(task)">
+							<template #icon><NcIconSvgWrapper :svg="icons.check" /></template>
+							{{ t('Finish') }}
+						</NcActionButton>
+						<NcActionButton v-if="task.status !== 'ignored'" :disabled="busy" @click.stop="lifecycle(task, 'ignore')">
+							<template #icon><NcIconSvgWrapper :svg="icons.close" /></template>
+							{{ t('Ignore') }}
+						</NcActionButton>
+						<NcActionButton v-else :disabled="busy" @click.stop="lifecycle(task, 'restore')">
+							<template #icon><NcIconSvgWrapper :svg="icons.restore" /></template>
+							{{ t('Restore') }}
+						</NcActionButton>
 						<NcActionButton v-if="current.deckStackId" :disabled="busy" @click.stop="syncDeck(task)">
 							<template #icon><NcIconSvgWrapper :svg="icons.deck" /></template>
 							{{ task.deckCardId ? t('Update Deck card') : t('Create Deck card') }}
+						</NcActionButton>
+						<NcActionButton :disabled="busy" @click.stop="openFolder(task)">
+							<template #icon><NcIconSvgWrapper :svg="icons.folder" /></template>
+							{{ t('Open folder') }}
+						</NcActionButton>
+						<NcActionButton v-if="task.deckCardId" @click.stop="openCard(task)">
+							<template #icon><NcIconSvgWrapper :svg="icons.deck" /></template>
+							{{ t('Open Deck card') }}
+						</NcActionButton>
+						<NcActionButton :disabled="busy" @click.stop="removeTask(task)">
+							<template #icon><NcIconSvgWrapper :svg="icons.close" /></template>
+							{{ t('Delete task record') }}
 						</NcActionButton>
 					</template>
 				</NcListItem>
@@ -285,6 +313,9 @@ const icons = {
 	check: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m10 17-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg>',
 	clock: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 20a8 8 0 0 0 8-8a8 8 0 0 0-8-8a8 8 0 0 0-8 8a8 8 0 0 0 8 8m0-18a10 10 0 0 1 10 10a10 10 0 0 1-10 10C6.47 22 2 17.5 2 12A10 10 0 0 1 12 2m.5 5v5.25l4.5 2.67l-.75 1.23L11 13V7h1.5Z"/></svg>',
 	warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M13 14h-2V9h2m0 9h-2v-2h2M1 21h22L12 2 1 21Z"/></svg>',
+	play: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7L8 5Z"/></svg>',
+	close: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>',
+	restore: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M13 3a9 9 0 0 0-9 9H1l4 4 4-4H6a7 7 0 1 1 7 7 7 7 0 0 1-4.9-2.1l-1.4 1.4A9 9 0 1 0 13 3Z"/></svg>',
 }
 
 export default {
@@ -398,6 +429,88 @@ export default {
 			// English source string -> the user's language, via the bundle main.js registers
 			// from the l10n file the server loaded. Falls back to the source string.
 			return translate('todofolder', text, values)
+		},
+		canStart(task) {
+			return ['ready', 'done'].includes(task.status)
+		},
+		canFinish(task) {
+			return ['ready', 'in_progress', 'done'].includes(task.status)
+		},
+		replaceTask(data) {
+			const index = this.tasks.findIndex((row) => row.id === data.id)
+			if (index >= 0) {
+				this.tasks.splice(index, 1, data)
+			}
+		},
+		async lifecycle(task, action) {
+			this.busy = true
+			try {
+				const { data } = await axios.post(generateUrl(`/apps/todofolder/api/tasks/${task.id}/${action}`))
+				this.replaceTask(data)
+			} catch (e) {
+				this.error = e?.response?.data?.error || e.message
+			} finally {
+				this.busy = false
+			}
+		},
+		openFinish(task) {
+			this.finishTask = task
+			this.finishStackId = task.suggestedStackId ?? null
+		},
+		async confirmFinish() {
+			if (!this.finishTask) {
+				return
+			}
+			this.busy = true
+			try {
+				const { data } = await axios.post(
+					generateUrl(`/apps/todofolder/api/tasks/${this.finishTask.id}/finish`),
+					{ stackId: this.finishStackId },
+				)
+				this.replaceTask(data)
+				this.finishTask = null
+			} catch (e) {
+				this.error = e?.response?.data?.error || e.message
+			} finally {
+				this.busy = false
+			}
+		},
+		async openFolder(task) {
+			try {
+				const { data } = await axios.get(generateUrl(`/apps/todofolder/api/tasks/${task.id}/links`))
+				if (data.folderUrl) {
+					window.open(data.folderUrl, '_blank')
+				}
+			} catch (e) {
+				this.error = e?.response?.data?.error || e.message
+			}
+		},
+		async openCard(task) {
+			try {
+				const { data } = await axios.get(generateUrl(`/apps/todofolder/api/tasks/${task.id}/links`))
+				if (data.cardUrl) {
+					window.open(data.cardUrl, '_blank')
+				}
+			} catch (e) {
+				this.error = e?.response?.data?.error || e.message
+			}
+		},
+		async removeTask(task) {
+			if (!window.confirm(this.t('Delete the task record of “{name}”? The folder stays where it is.', { name: task.title || task.folderName }))) {
+				return
+			}
+			this.busy = true
+			try {
+				await axios.delete(generateUrl(`/apps/todofolder/api/tasks/${task.id}`))
+				const index = this.tasks.findIndex((row) => row.id === task.id)
+				if (index >= 0) {
+					this.tasks.splice(index, 1)
+				}
+			} catch (e) {
+				this.error = e?.response?.data?.error || e.message
+			} finally {
+				this.busy = false
+			}
 		},
 		statusLabel(status) {
 			return {
