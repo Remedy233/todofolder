@@ -195,8 +195,11 @@ class DeckBridge {
 			return null;
 		}
 		$boardId = $workspace->getDeckBoardId();
-		$stackId = $workspace->getDeckStackId();
-		if ($boardId === null || $stackId === null) {
+		// New cards land in the inbox column; every write after that respects where the card
+		// actually is, which is what task.deckStackId records.
+		$stackId = $workspace->getDeckInboxStackId() ?? $workspace->getDeckStackId();
+		$homeStack = $task->getDeckStackId() ?? $stackId;
+		if ($boardId === null || $stackId === null || $homeStack === null) {
 			return null;
 		}
 
@@ -208,7 +211,7 @@ class DeckBridge {
 		// request (labels, assignment, attachments are refreshed by the web UI path).
 		$hasSession = $this->userSession->getUser() !== null;
 
-		return $this->asUser($owner, function () use ($task, $workspace, $stackId, $boardId, $owner, $tagNames, $hasSession): ?array {
+		return $this->asUser($owner, function () use ($task, $workspace, $stackId, $homeStack, $boardId, $owner, $tagNames, $hasSession): ?array {
 			/** @var \OCA\Deck\Service\CardService $cardService */
 			$cardService = $hasSession ? Server::get('OCA\Deck\Service\CardService') : null;
 
@@ -235,13 +238,13 @@ class DeckBridge {
 					// stack — dragged to "Done", archived, marked done — a later scan or
 					// re-analysis must not drag it back. Only cards that are still where
 					// this app put them get refreshed.
-					$movedAway = (int)$card->getStackId() !== (int)$stackId;
+					$movedAway = (int)$card->getStackId() !== (int)$homeStack;
 					$done = $card->getDone();
 					$finished = $movedAway || $card->getArchived() || $done !== null;
 					if ($finished) {
 						$this->logger->info(
 							'todofolder: deck card ' . $existingCardId . ' is finished or moved '
-							. '(stack ' . (int)$card->getStackId() . ' vs bound ' . (int)$stackId
+							. '(stack ' . (int)$card->getStackId() . ' vs home ' . (int)$homeStack
 							. ', done=' . ($done === null ? 'no' : $done->format('c'))
 							. ', archived=' . ($card->getArchived() ? 'yes' : 'no')
 							. '), leaving it alone',
@@ -285,13 +288,13 @@ class DeckBridge {
 
 			if ($cardId === null) {
 				if ($cardService !== null) {
-					$card = $cardService->create($title, (int)$stackId, 'plain', 0, $owner, $description, $due, $start, $color);
+					$card = $cardService->create($title, (int)$homeStack, 'plain', 0, $owner, $description, $due, $start, $color);
 					$cardId = (int)$card->getId();
 				} else {
 					$card = new Card();
 					$card->setTitle($title);
 					$card->setDescription($description);
-					$card->setStackId((int)$stackId);
+					$card->setStackId((int)$homeStack);
 					$card->setType('plain');
 					$card->setOwner($owner);
 					$card->setLastEditor($owner);
@@ -316,8 +319,90 @@ class DeckBridge {
 				$this->logger->debug('todofolder: background sync of card ' . $cardId . ' skipped labels, assignee and attachments');
 			}
 
-			return ['cardId' => (int)$cardId, 'finished' => $finishedByHuman];
+			$finalStack = (int)($card->getStackId() ?? $homeStack);
+			return ['cardId' => (int)$cardId, 'finished' => $finishedByHuman, 'stackId' => $finalStack];
 		});
+	}
+
+	/**
+	 * Delete the card that belongs to a task. Used when a user removes a task record and
+	 * explicitly asks for the card to go too; the default keeps the card.
+	 */
+	public function deleteCard(Task $task, Workspace $workspace): bool {
+		$cardId = $task->getDeckCardId();
+		if ($cardId === null || !$this->isAvailable()) {
+			return false;
+		}
+		$owner = $workspace->getUserId();
+		$hasSession = $this->userSession->getUser() !== null;
+
+		return (bool)$this->asUser($owner, function () use ($cardId, $hasSession, $owner): bool {
+			if ($hasSession) {
+				/** @var \OCA\Deck\Service\CardService $cardService */
+				$cardService = Server::get('OCA\Deck\Service\CardService');
+				$cardService->delete($cardId);
+				return true;
+			}
+			$card = Server::get(CardMapper::class)->find($cardId, false);
+			$card->setDeletedAt(time());
+			$card->setLastEditor($owner);
+			$card->setLastModified(time());
+			Server::get(CardMapper::class)->update($card);
+			return true;
+		}) ?? false;
+	}
+
+	/**
+	 * Move an existing card into another column — the way "start", "finish" and a manual
+	 * category change reach Deck. Works from the web path (Deck's service) and from occ or a
+	 * background job (the mapper), because Deck has no webhook and both paths have to exist.
+	 */
+	public function moveCard(Task $task, Workspace $workspace, int $stackId): bool {
+		if (!$this->isAvailable()) {
+			return false;
+		}
+		$cardId = $task->getDeckCardId();
+		$boardId = $workspace->getDeckBoardId();
+		if ($cardId === null || $boardId === null) {
+			return false;
+		}
+		$owner = $workspace->getUserId();
+		$hasSession = $this->userSession->getUser() !== null;
+
+		return (bool)$this->asUser($owner, function () use ($cardId, $stackId, $task, $owner, $hasSession): bool {
+			$title = $task->getTitle();
+			if ($title === null || $title === '') {
+				$title = $task->getFolderName();
+			}
+			if ($hasSession) {
+				/** @var \OCA\Deck\Service\CardService $cardService */
+				$cardService = Server::get('OCA\Deck\Service\CardService');
+				$card = $cardService->find($cardId);
+				$cardService->update(
+					$cardId,
+					$title,
+					$stackId,
+					'plain',
+					$owner,
+					(string)$card->getDescription(),
+					0,
+					$task->getDueDate(),
+					(int)$card->getDeletedAt(),
+					$card->getArchived(),
+					null,
+					$task->getReceivedAt(),
+				);
+				return true;
+			}
+
+			$card = Server::get(CardMapper::class)->find($cardId, false);
+			$card->setStackId($stackId);
+			$card->setOrder(0);
+			$card->setLastEditor($owner);
+			$card->setLastModified(time());
+			Server::get(CardMapper::class)->update($card);
+			return true;
+		}) ?? false;
 	}
 
 	/**

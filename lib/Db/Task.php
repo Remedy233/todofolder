@@ -66,6 +66,22 @@ class Task extends Entity implements \JsonSerializable {
 	 * again once the card is back in the bound column.
 	 */
 	public const STATUS_DONE = 'done';
+	/**
+	 * Started by a human (or dragged into the column mapped to in_progress). Sits between
+	 * ready and done so a board shows what is being worked on right now.
+	 */
+	public const STATUS_IN_PROGRESS = 'in_progress';
+
+	/** Column the card currently sits in; the reconciler writes the real value back. */
+	protected ?int $deckStackId = null;
+	/** How deckStackId was chosen: ai, manual, fallback, inbox. */
+	protected ?string $stackSource = null;
+	/** Column the model suggested while analysing; applied when the task is finished. */
+	protected ?int $suggestedStackId = null;
+	protected ?string $suggestedStackName = null;
+	protected ?string $suggestedStackReason = null;
+	/** First time a human started the task (unix time). */
+	protected ?int $startedAt = null;
 
 	protected int $workspaceId = 0;
 	protected string $folderPath = '';
@@ -113,6 +129,12 @@ class Task extends Entity implements \JsonSerializable {
 		$this->addType('analyzedAt', 'integer');
 		$this->addType('createdAt', 'integer');
 		$this->addType('updatedAt', 'integer');
+		$this->addType('deckStackId', 'integer');
+		$this->addType('stackSource', 'string');
+		$this->addType('suggestedStackId', 'integer');
+		$this->addType('suggestedStackName', 'string');
+		$this->addType('suggestedStackReason', 'string');
+		$this->addType('startedAt', 'integer');
 	}
 
 	/**
@@ -154,6 +176,12 @@ class Task extends Entity implements \JsonSerializable {
 			'aiModel' => $this->getAiModel(),
 			'errorMessage' => $this->getErrorMessage(),
 			'deckCardId' => $this->getDeckCardId(),
+			'deckStackId' => $this->getDeckStackId(),
+			'stackSource' => $this->getStackSource(),
+			'suggestedStackId' => $this->getSuggestedStackId(),
+			'suggestedStackName' => $this->getSuggestedStackName(),
+			'suggestedStackReason' => $this->getSuggestedStackReason(),
+			'startedAt' => $this->getStartedAt(),
 			'analyzedAt' => $this->getAnalyzedAt(),
 			'createdAt' => $this->getCreatedAt(),
 			'updatedAt' => $this->getUpdatedAt(),

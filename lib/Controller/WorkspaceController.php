@@ -67,7 +67,9 @@ class WorkspaceController extends Controller {
 	#[FrontpageRoute(verb: 'PUT', url: '/api/workspaces/{id}')]
 	public function update(int $id, array $fields = []): JSONResponse {
 		$raw = $this->request->getParams();
-		$allowed = ['name', 'folderPath', 'deckBoardId', 'deckStackId', 'autoDeck', 'scanEnabled', 'scanInterval', 'aiExtraPrompt'];
+		$allowed = ['name', 'folderPath', 'deckBoardId', 'deckStackId', 'autoDeck', 'scanEnabled', 'scanInterval', 'aiExtraPrompt',
+			'deckInboxStackId', 'deckClassify', 'deckClassifyTiming', 'deckDoneTarget', 'deckCategoryStacks',
+			'deckStateMap', 'deckCompletionStackId', 'deckReconcileInterval'];
 		$fields = [];
 		foreach ($allowed as $key) {
 			if (array_key_exists($key, $raw)) {

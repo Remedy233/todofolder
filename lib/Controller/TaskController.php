@@ -216,6 +216,156 @@ class TaskController extends Controller {
 	 * one), make sure it has a column, store the binding, and optionally push the tasks
 	 * that already have an answer.
 	 */
+	/**
+	 * Load a task plus the workspace it belongs to, or answer with the error to return.
+	 *
+	 * @return array{0: Task, 1: \OCA\TodoFolder\Db\Workspace}|JSONResponse
+	 */
+	private function load(int $id, bool $needWrite = true): array|JSONResponse {
+		try {
+			$task = $this->tasks->find($id);
+			$workspace = $this->workspaces->getForUser($task->getWorkspaceId(), (string)$this->userId, $needWrite);
+		} catch (\Throwable) {
+			return new JSONResponse(['error' => $this->l10n->t('Task not found')], Http::STATUS_NOT_FOUND);
+		}
+		return [$task, $workspace];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function payload(Task $task): array {
+		return [
+			...$task->jsonSerialize(),
+			'tags' => array_map(static fn ($t) => $t->jsonSerialize(), $this->taskTags->findByTask((int)$task->getId())),
+		];
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/tasks/{id}/start')]
+	public function start(int $id): JSONResponse {
+		$loaded = $this->load($id);
+		if ($loaded instanceof JSONResponse) {
+			return $loaded;
+		}
+		[$task, $workspace] = $loaded;
+		try {
+			return new JSONResponse($this->payload($this->analysis->startTask($task, $workspace)));
+		} catch (\InvalidArgumentException $e) {
+			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_CONFLICT);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/tasks/{id}/finish')]
+	public function finish(int $id, ?int $stackId = null): JSONResponse {
+		$loaded = $this->load($id);
+		if ($loaded instanceof JSONResponse) {
+			return $loaded;
+		}
+		[$task, $workspace] = $loaded;
+		try {
+			return new JSONResponse($this->payload($this->analysis->finishTask($task, $workspace, $stackId)));
+		} catch (\InvalidArgumentException $e) {
+			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_CONFLICT);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/tasks/{id}/ignore')]
+	public function ignore(int $id): JSONResponse {
+		$loaded = $this->load($id);
+		if ($loaded instanceof JSONResponse) {
+			return $loaded;
+		}
+		[$task, $workspace] = $loaded;
+		try {
+			return new JSONResponse($this->payload($this->analysis->ignoreTask($task, $workspace)));
+		} catch (\InvalidArgumentException $e) {
+			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_CONFLICT);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/tasks/{id}/restore')]
+	public function restore(int $id): JSONResponse {
+		$loaded = $this->load($id);
+		if ($loaded instanceof JSONResponse) {
+			return $loaded;
+		}
+		[$task, $workspace] = $loaded;
+		try {
+			return new JSONResponse($this->payload($this->analysis->restoreTask($task, $workspace)));
+		} catch (\InvalidArgumentException $e) {
+			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_CONFLICT);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/tasks/{id}/stack')]
+	public function stack(int $id, int $stackId = 0): JSONResponse {
+		$loaded = $this->load($id);
+		if ($loaded instanceof JSONResponse) {
+			return $loaded;
+		}
+		[$task, $workspace] = $loaded;
+		if ($stackId <= 0) {
+			return new JSONResponse(['error' => $this->l10n->t('A column must be given')], Http::STATUS_BAD_REQUEST);
+		}
+		return new JSONResponse($this->payload($this->analysis->setCategory($task, $workspace, $stackId)));
+	}
+
+	/**
+	 * Links a user needs next to a task: the folder in Files, the card in Deck.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/tasks/{id}/links')]
+	public function links(int $id): JSONResponse {
+		$loaded = $this->load($id, false);
+		if ($loaded instanceof JSONResponse) {
+			return $loaded;
+		}
+		[$task, $workspace] = $loaded;
+		$folderUrl = \OCP\Server::get(\OCP\IURLGenerator::class)->linkTo(
+			'files',
+			'',
+			['dir' => $task->getFolderPath()],
+		);
+		$cardUrl = null;
+		if ($task->getDeckCardId() !== null && $workspace->getDeckBoardId() !== null) {
+			$cardUrl = \OCP\Server::get(\OCP\IURLGenerator::class)->linkTo(
+				'deck',
+				'board',
+				[],
+			) . '#' . $workspace->getDeckBoardId() . '/' . $task->getDeckCardId();
+		}
+		return new JSONResponse([
+			'folderUrl' => $folderUrl,
+			'cardUrl' => $cardUrl,
+			'folderPath' => $task->getFolderPath(),
+			'cardId' => $task->getDeckCardId(),
+			'boardId' => $workspace->getDeckBoardId(),
+			'stackId' => $task->getDeckStackId(),
+		]);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/tasks/{id}')]
+	public function destroy(int $id, string $card = 'keep'): JSONResponse {
+		$loaded = $this->load($id);
+		if ($loaded instanceof JSONResponse) {
+			return $loaded;
+		}
+		[$task, $workspace] = $loaded;
+		$cardDeleted = false;
+		if ($card === 'delete') {
+			$cardDeleted = $this->deck->deleteCard($task, $workspace);
+		}
+		$this->taskTags->deleteByTask($id);
+		$this->tasks->delete($task);
+		return new JSONResponse(['removed' => true, 'cardDeleted' => $cardDeleted]);
+	}
+
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/workspaces/{id}/decksetup')]
 	public function deckSetup(int $id, bool $syncTasks = true): JSONResponse {

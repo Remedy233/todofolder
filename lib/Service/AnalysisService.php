@@ -76,6 +76,7 @@ PROMPT;
 		private IL10N $l10n,
 		private IFactory $l10nFactory,
 		private IConfig $systemConfig,
+		private TaskStateMachine $states,
 	) {
 	}
 
@@ -103,8 +104,12 @@ PROMPT;
 	 * error so the UI can show it, and the caller gets the row back either way.
 	 */
 	public function analyze(Task $task, Workspace $workspace): Task {
-		$task->setStatus(Task::STATUS_ANALYZING);
-		$task->setUpdatedAt(time());
+		// done / ignored tasks are reopened first: a human asking for a fresh analysis of a
+		// finished task means "look at it again", not "stay finished".
+		if (!$this->states->can((string)$task->getStatus(), Task::STATUS_ANALYZING)) {
+			$this->states->transition($task, Task::STATUS_READY, time());
+		}
+		$this->states->transition($task, Task::STATUS_ANALYZING, time());
 		$this->tasks->update($task);
 
 		try {
@@ -128,10 +133,9 @@ PROMPT;
 			if (!$task->isFieldLocked('priority')) {
 				$task->setPriority($this->normalisePriority($answer['priority'] ?? null));
 			}
-			$task->setStatus(Task::STATUS_READY);
+			$this->states->transition($task, Task::STATUS_READY, time());
 			$task->setAiModel($this->config->isMock() ? 'mock' : $this->config->model());
 			$task->setContentHash($extract['hash']);
-			$task->setErrorMessage(null);
 			$task->setAnalyzedAt(time());
 			$task->setUpdatedAt(time());
 			$this->tasks->update($task);
@@ -139,8 +143,13 @@ PROMPT;
 			$tagNames = is_array($answer['tags'] ?? null) ? $answer['tags'] : [];
 			$this->tags->replaceAiTags($task, $tagNames, $workspace->getUserId());
 
+			// Category: remember the model's pick now, apply it when the task is finished
+			// (deck_classify_timing=on_done, the default) or right away when the workspace
+			// prefers cards filed from the start.
+			$this->applyCategory($task, $workspace, $answer);
+
 			if ($workspace->getAutoDeck()) {
-				if ($workspace->getDeckStackId() === null) {
+				if (($workspace->getDeckInboxStackId() ?? $workspace->getDeckStackId()) === null) {
 					// Silently doing nothing is what makes Deck sync look broken: say it on
 					// the task instead, pointing at the one-click fix.
 					$task->setErrorMessage($this->l10n->t('This workspace has no Deck board or column yet, so no card was created. Use “Prepare board” in the workspace settings.'));
@@ -152,13 +161,160 @@ PROMPT;
 			}
 		} catch (\Throwable $e) {
 			$this->logger->warning('todofolder: analysis failed for task ' . $task->getId() . ': ' . $e->getMessage());
-			$task->setStatus(Task::STATUS_ERROR);
+			if ($this->states->can((string)$task->getStatus(), Task::STATUS_ERROR)) {
+				$this->states->transition($task, Task::STATUS_ERROR, time());
+			} else {
+				$task->setStatus(Task::STATUS_ERROR);
+				$task->setUpdatedAt(time());
+			}
 			$task->setErrorMessage(mb_substr($e->getMessage(), 0, 1000));
-			$task->setUpdatedAt(time());
 			$this->tasks->update($task);
 		}
 
 		return $task;
+	}
+
+	/**
+	 * Store the model's category as a suggestion, and — when the workspace files cards from
+	 * the start — use it for this task's position right away.
+	 *
+	 * @param array<string, mixed> $answer
+	 */
+	private function applyCategory(Task $task, Workspace $workspace, array $answer): void {
+		if (!$workspace->getDeckClassify()) {
+			return;
+		}
+		$resolved = $this->resolveCategory($workspace, $answer['stack'] ?? null);
+		if ($resolved !== null) {
+			$task->setSuggestedStackId($resolved['id']);
+			$task->setSuggestedStackName($resolved['name']);
+			$task->setSuggestedStackReason($this->cleanText($answer['stack_reason'] ?? null, 255));
+			if ($workspace->getDeckClassifyTiming() === 'on_create') {
+				$task->setDeckStackId($resolved['id']);
+				$task->setStackSource('ai');
+			}
+			$this->tasks->update($task);
+			return;
+		}
+		$asked = $answer['stack'] ?? null;
+		if (is_string($asked) && trim($asked) !== '') {
+			// The model named something the board does not have: keep the name for the
+			// detail panel, and let the card fall back to the inbox column.
+			$task->setSuggestedStackName($this->cleanText($asked, 64));
+			$task->setStackSource('fallback');
+			$this->tasks->update($task);
+		}
+	}
+
+	/**
+	 * The column a finished task belongs in, according to the workspace settings.
+	 * Returns null when the card should stay where it is.
+	 */
+	public function completionStackFor(Task $task, Workspace $workspace, ?int $overrideStackId = null): ?int {
+		if ($overrideStackId !== null) {
+			return $overrideStackId;
+		}
+		if (!$workspace->getDeckClassify()) {
+			return null;
+		}
+		$target = $workspace->getDeckDoneTarget();
+		if ($target === 'in_place') {
+			return null;
+		}
+		if ($target === 'fixed') {
+			return $workspace->getDeckCompletionStackId() ?? $workspace->getDeckStackId();
+		}
+		return $task->getSuggestedStackId() ?? $workspace->getDeckCompletionStackId() ?? $workspace->getDeckStackId();
+	}
+
+	/**
+	 * Start a task: ready → in_progress, and the card moves to the column mapped to that state
+	 * (or stays when the workspace has no such column).
+	 */
+	public function startTask(Task $task, Workspace $workspace): Task {
+		$this->states->transition($task, Task::STATUS_IN_PROGRESS, time());
+		$this->tasks->update($task);
+		$stackId = $this->stateStack($workspace, 'in_progress');
+		if ($stackId !== null) {
+			$this->moveCardTo($task, $workspace, $stackId);
+		}
+		return $task;
+	}
+
+	/**
+	 * Finish a task: → done, then the card goes to its category column (the model's
+	 * suggestion unless the caller overrides it).
+	 */
+	public function finishTask(Task $task, Workspace $workspace, ?int $overrideStackId = null): Task {
+		$this->states->transition($task, Task::STATUS_DONE, time());
+		$stackId = $this->completionStackFor($task, $workspace, $overrideStackId);
+		if ($overrideStackId !== null) {
+			// A human picked the category: remember it as theirs, so re-analysis keeps it.
+			$task->setDeckStackId($overrideStackId);
+			$task->setSuggestedStackId($overrideStackId);
+			$task->setStackSource('manual');
+			$this->tasks->update($task);
+		}
+		$this->tasks->update($task);
+		if ($stackId !== null) {
+			$this->moveCardTo($task, $workspace, $stackId);
+		}
+		return $task;
+	}
+
+	public function ignoreTask(Task $task, Workspace $workspace): Task {
+		$this->states->transition($task, Task::STATUS_IGNORED, time());
+		$this->tasks->update($task);
+		return $task;
+	}
+
+	public function restoreTask(Task $task, Workspace $workspace): Task {
+		// A finished task comes back as ready (its card is still there), an ignored one goes
+		// back to the queue so the next scan can look at it again.
+		$target = $task->getStatus() === Task::STATUS_DONE ? Task::STATUS_READY : Task::STATUS_PENDING;
+		$this->states->transition($task, $target, time());
+		$task->setErrorMessage(null);
+		$this->tasks->update($task);
+		// A reopened task belongs in the inbox again, not in the column it was filed into.
+		$inbox = $workspace->getDeckInboxStackId();
+		if ($inbox !== null && $task->getDeckCardId() !== null && $task->getDeckStackId() !== $inbox) {
+			$this->moveCardTo($task, $workspace, $inbox);
+		}
+		return $task;
+	}
+
+	/** Manual category change; the card follows immediately. */
+	public function setCategory(Task $task, Workspace $workspace, int $stackId): Task {
+		$task->setSuggestedStackId($stackId);
+		$task->setDeckStackId($stackId);
+		$task->setStackSource('manual');
+		$task->setUpdatedAt(time());
+		$this->tasks->update($task);
+		$this->moveCardTo($task, $workspace, $stackId);
+		return $task;
+	}
+
+	private function moveCardTo(Task $task, Workspace $workspace, int $stackId): void {
+		try {
+			$this->deck->moveCard($task, $workspace, $stackId);
+			$task->setDeckStackId($stackId);
+			$task->setUpdatedAt(time());
+			$this->tasks->update($task);
+		} catch (\Throwable $e) {
+			// A missing card or no Deck at all must not fail the status change: the task is
+			// the record of truth, the card follows on the next sync.
+			$this->logger->info('todofolder: could not move card of task ' . $task->getId() . ' to stack ' . $stackId . ': ' . $e->getMessage());
+		}
+	}
+
+	/** The column mapped to a state, if the workspace defined one. */
+	private function stateStack(Workspace $workspace, string $state): ?int {
+		foreach ($workspace->getStateMap() as $stackId => $mapped) {
+			if ($mapped === $state) {
+				return (int)$stackId;
+			}
+		}
+		return null;
 	}
 
 	public function syncDeck(Task $task, Workspace $workspace): Task {
@@ -168,13 +324,19 @@ PROMPT;
 			$sync = $this->deck->sync($task, $workspace, $this->tags->namesForTask((int)$task->getId()));
 			if ($sync !== null) {
 				$task->setDeckCardId($sync['cardId']);
-				// Deck owns completion: a card that was dragged out of the column, marked
-				// done or archived marks the task as done, and a card that is back in the
-				// column clears that mark again.
-				if ($sync['finished']) {
-					$task->setStatus(Task::STATUS_DONE);
-				} elseif ($task->getStatus() === Task::STATUS_DONE) {
-					$task->setStatus(Task::STATUS_READY);
+				if (isset($sync['stackId'])) {
+					// Remember where the card really is: that is the reference point for
+					// "did a human move it".
+					$task->setDeckStackId((int)$sync['stackId']);
+				}
+				// Deck owns completion: a card that was dragged out of its column, marked
+				// done or archived marks the task as done, and a card that is back clears it.
+				if ($sync['finished'] && $task->getStatus() !== Task::STATUS_DONE) {
+					if ($this->states->can((string)$task->getStatus(), Task::STATUS_DONE)) {
+						$this->states->transition($task, Task::STATUS_DONE, time());
+					}
+				} elseif (!$sync['finished'] && $task->getStatus() === Task::STATUS_DONE) {
+					$this->states->transition($task, Task::STATUS_READY, time());
 				}
 				$task->setUpdatedAt(time());
 				$this->tasks->update($task);
@@ -243,7 +405,88 @@ PROMPT;
 			$lines[] = '';
 			$lines[] = $l10n->t('Extra requirements: ') . $extra;
 		}
+
+		// The Deck columns are the category list: hand the model the allowed names so it can
+		// pick one. The answer stays a suggestion until the task is marked done.
+		$categories = $this->categoryNames($workspace);
+		if ($categories !== []) {
+			$lines[] = '';
+			$lines[] = $l10n->t('Categories (pick exactly one, return the name unchanged): ') . implode(' / ', $categories);
+			$lines[] = $l10n->t('Also return "stack" with that name and "stack_reason" with one short sentence.');
+		}
+
 		return implode("\n", $lines);
+	}
+
+	/**
+	 * Column names the model may choose from: the ones the workspace marked as categories, or
+	 * — when it marked none — every column except the inbox and the ones mapped to a state.
+	 *
+	 * @return list<string>
+	 */
+	private function categoryNames(Workspace $workspace): array {
+		if (!$workspace->getDeckClassify() || $workspace->getDeckBoardId() === null) {
+			return [];
+		}
+		$stacks = $this->deck->stacks($workspace->getUserId(), (int)$workspace->getDeckBoardId());
+		if ($stacks === []) {
+			return [];
+		}
+		$allowed = $workspace->getCategoryStackList();
+		$stateMap = $workspace->getStateMap();
+		$inbox = $workspace->getDeckInboxStackId();
+		$names = [];
+		foreach ($stacks as $stack) {
+			$id = (int)$stack['id'];
+			if ($allowed !== []) {
+				if (!in_array($id, $allowed, true)) {
+					continue;
+				}
+			} else {
+				if ($inbox !== null && $id === $inbox) {
+					continue;
+				}
+				if (isset($stateMap[$id]) && $stateMap[$id] !== 'done') {
+					continue;
+				}
+			}
+			$names[] = (string)$stack['title'];
+		}
+		return $names;
+	}
+
+	/**
+	 * Turn the model's category name into a stack id. Exact name first, then a normalised
+	 * compare, then "one name contains the other" — models like to add a suffix. Nothing
+	 * matches: the caller keeps its fallback column.
+	 *
+	 * @return array{id: int, name: string}|null
+	 */
+	private function resolveCategory(Workspace $workspace, mixed $answerName): ?array {
+		if (!is_string($answerName) || trim($answerName) === '' || $workspace->getDeckBoardId() === null) {
+			return null;
+		}
+		$wanted = trim($answerName);
+		$stacks = $this->deck->stacks($workspace->getUserId(), (int)$workspace->getDeckBoardId());
+		$normalise = static fn (string $s): string => mb_strtolower(preg_replace('/\s+/u', '', $s) ?? '');
+		foreach ($stacks as $stack) {
+			if ($stack['title'] === $wanted) {
+				return ['id' => (int)$stack['id'], 'name' => (string)$stack['title']];
+			}
+		}
+		$normalised = $normalise($wanted);
+		foreach ($stacks as $stack) {
+			if ($normalise((string)$stack['title']) === $normalised) {
+				return ['id' => (int)$stack['id'], 'name' => (string)$stack['title']];
+			}
+		}
+		foreach ($stacks as $stack) {
+			$title = $normalise((string)$stack['title']);
+			if ($title !== '' && $normalised !== '' && (str_contains($title, $normalised) || str_contains($normalised, $title))) {
+				return ['id' => (int)$stack['id'], 'name' => (string)$stack['title']];
+			}
+		}
+		return null;
 	}
 
 	private function humanSize(int $bytes): string {

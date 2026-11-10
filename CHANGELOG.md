@@ -4,6 +4,18 @@ All notable changes to TodoFolder are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-11-10
+
+### Added
+
+- **Deck columns as categories.** A workspace can let the model pick a category column while it
+  analyses a task. The suggestion is stored (`suggested_stack_*`) and applied when the task is
+  marked done, so the todo column stays an inbox and no second model call is needed.
+- **"In progress" status.** `in_progress` sits between ready and done, with `started_at`
+  recorded the first time a task is started.
+- **A state machine** (`TaskStateMachine`) now owns every status change. A finished task can no
+  longer be dragged back to pending by a rescan, and invalid transitions are rejected instead of
+  silently written.
 ## [0.0.5] - 2026-11-09
 
 ### Fixed

@@ -200,6 +200,65 @@ class WorkspaceService {
 			$prompt = trim((string)$fields['aiExtraPrompt']);
 			$workspace->setAiExtraPrompt($prompt === '' ? null : mb_substr($prompt, 0, 2000));
 		}
+		if (array_key_exists('deckInboxStackId', $fields)) {
+			$inbox = $fields['deckInboxStackId'];
+			$workspace->setDeckInboxStackId($inbox === null || $inbox === '' ? null : (int)$inbox);
+		}
+		if (array_key_exists('deckClassify', $fields)) {
+			$workspace->setDeckClassify((bool)$fields['deckClassify']);
+		}
+		if (array_key_exists('deckClassifyTiming', $fields)) {
+			$timing = (string)$fields['deckClassifyTiming'];
+			if (!in_array($timing, ['on_done', 'on_create', 'manual'], true)) {
+				throw new \InvalidArgumentException('deckClassifyTiming must be on_done, on_create or manual');
+			}
+			$workspace->setDeckClassifyTiming($timing);
+		}
+		if (array_key_exists('deckDoneTarget', $fields)) {
+			$target = (string)$fields['deckDoneTarget'];
+			if (!in_array($target, ['category', 'fixed', 'in_place'], true)) {
+				throw new \InvalidArgumentException('deckDoneTarget must be category, fixed or in_place');
+			}
+			$workspace->setDeckDoneTarget($target);
+		}
+		if (array_key_exists('deckCategoryStacks', $fields)) {
+			$stacks = $fields['deckCategoryStacks'];
+			if ($stacks === null || $stacks === '') {
+				$workspace->setDeckCategoryStacks(null);
+			} elseif (is_array($stacks)) {
+				$ids = array_values(array_map('intval', array_filter($stacks, static fn ($v): bool => is_numeric($v))));
+				$workspace->setDeckCategoryStacks($ids === [] ? null : json_encode($ids, JSON_THROW_ON_ERROR));
+			} else {
+				throw new \InvalidArgumentException('deckCategoryStacks must be a list of column ids');
+			}
+		}
+		if (array_key_exists('deckStateMap', $fields)) {
+			$map = $fields['deckStateMap'];
+			if ($map === null || $map === '') {
+				$workspace->setDeckStateMap(null);
+			} elseif (is_array($map)) {
+				$clean = [];
+				foreach ($map as $stackId => $state) {
+					if (!is_numeric($stackId)) {
+						continue;
+					}
+					if (!in_array((string)$state, ['todo', 'in_progress', 'done', 'archive'], true)) {
+						throw new \InvalidArgumentException('deckStateMap values must be todo, in_progress, done or archive');
+					}
+					$clean[(string)(int)$stackId] = (string)$state;
+				}
+				$workspace->setDeckStateMap($clean === [] ? null : json_encode($clean, JSON_THROW_ON_ERROR));
+			} else {
+				throw new \InvalidArgumentException('deckStateMap must be a map of column id to state');
+			}
+		}
+		if (array_key_exists('deckCompletionStackId', $fields)) {
+			$done = $fields['deckCompletionStackId'];
+			$workspace->setDeckCompletionStackId($done === null || $done === '' ? null : (int)$done);
+		}
+		if (array_key_exists('deckReconcileInterval', $fields)) {
+			$workspace->setDeckReconcileInterval(max(1, (int)$fields['deckReconcileInterval']));
+		}
 		$workspace->setUpdatedAt(time());
 		return $this->mapper->update($workspace);
 	}
