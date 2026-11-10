@@ -247,6 +247,16 @@
 			<NcDialogButton variant="primary" :label="t('Save')" :callback="saveTask" />
 		</template>
 	</NcDialog>
+	<!-- 完成并归列：空壳先验证挂载位置，内容下一步再填 -->
+	<NcDialog :open="finishTask !== null"
+		:name="t('Finish and file the card')"
+		size="small"
+		@update:open="finishTask = null">
+		<p>{{ t('The card moves to the category you pick here.') }}</p>
+		<template #actions>
+			<NcDialogButton :label="t('Cancel')" :callback="() => { finishTask = null }" />
+		</template>
+	</NcDialog>
 
 	<!-- 确认框：Nextcloud 不用 window.confirm，改成 NcDialog + NcDialogButton -->
 	<NcDialog :open="confirmState.open"
@@ -353,6 +363,7 @@ export default {
 			status: '',
 			error: '',
 			confirmState: { open: false, title: '', message: '', confirmLabel: '删除', resolve: null },
+			finishTask: null,
 			workspaceDialog: false,
 			settingsDialog: false,
 			taskDialog: false,
