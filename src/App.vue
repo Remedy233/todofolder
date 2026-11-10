@@ -362,6 +362,9 @@ export default {
 			tasks: [],
 			currentId: null,
 			search: '',
+			statusFilter: 'all',
+			keyword: '',
+			sortBy: 'due',
 			busy: false,
 			status: '',
 			error: '',
@@ -440,7 +443,47 @@ export default {
 	mounted() {
 		this.load()
 	},
+	computed: {
+		filteredTasks() {
+			const keyword = this.keyword.trim().toLowerCase()
+			const rows = this.tasks.filter((task) => {
+				if (this.statusFilter !== 'all' && task.status !== this.statusFilter) {
+					return false
+				}
+				if (keyword === '') {
+					return true
+				}
+				const haystack = [task.title, task.folderName, task.summary, ...((task.tags || []).map((tag) => tag.tagName))]
+					.filter(Boolean).join(' ').toLowerCase()
+				return haystack.includes(keyword)
+			})
+			return [...rows].sort((a, b) => {
+				if (this.sortBy === 'priority') {
+					return (b.priority ?? 0) - (a.priority ?? 0)
+				}
+				if (this.sortBy === 'updated') {
+					return (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+				}
+				if (!a.dueDate && !b.dueDate) {
+					return 0
+				}
+				if (!a.dueDate) {
+					return 1
+				}
+				if (!b.dueDate) {
+					return -1
+				}
+				return a.dueDate.localeCompare(b.dueDate)
+			})
+		},
+	},
 	methods: {
+		isOverdue(task) {
+			if (!task.dueDate || ['done', 'ignored'].includes(task.status)) {
+				return false
+			}
+			return task.dueDate < new Date().toISOString().slice(0, 10)
+		},
 		t(text, values) {
 			// English source string -> the user's language, via the bundle main.js registers
 			// from the l10n file the server loaded. Falls back to the source string.
