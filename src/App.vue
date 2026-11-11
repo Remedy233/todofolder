@@ -69,20 +69,12 @@
 		</div>
 
 			<div v-if="tasks.length" class="todofolder-filters">
-				<select v-model="statusFilter" class="todofolder-native-select" :aria-label="t('Status')">
-					<option value="all">{{ t('All') }}</option>
-					<option value="ready">{{ t('Ready') }}</option>
-					<option value="in_progress">{{ t('In progress') }}</option>
-					<option value="done">{{ t('Completed') }}</option>
-					<option value="error">{{ t('Error') }}</option>
-					<option value="ignored">{{ t('Ignored') }}</option>
-				</select>
-				<input v-model="keyword" type="search" class="todofolder-filter-search" :placeholder="t('Search tasks')" :aria-label="t('Search tasks')">
-				<select v-model="sortBy" class="todofolder-native-select" :aria-label="t('Sort by')">
-					<option value="due">{{ t('Due date') }}</option>
-					<option value="priority">{{ t('Priority') }}</option>
-					<option value="updated">{{ t('Recently changed') }}</option>
-				</select>
+				<NcSelect v-model="statusFilterChoice" :options="statusOptions" :clearable="false"
+					:aria-label="t('Status')" class="todofolder-filters__status" />
+				<NcSelect v-model="sortChoice" :options="sortOptions" :clearable="false"
+					:aria-label="t('Sort by')" class="todofolder-filters__sort" />
+				<NcTextField v-model="keyword" type="search" :label="t('Search tasks')"
+					class="todofolder-filters__search" />
 			</div>
 		<NcEmptyContent v-if="!current"
 			:name="t('No workspaces yet')"
@@ -231,35 +223,6 @@
 			<NcCheckboxRadioSwitch v-model="settings.scanEnabled" type="switch">
 				{{ t('Allow scheduled background scans') }}
 			</NcCheckboxRadioSwitch>
-
-			<hr class="todofolder-form__sep">
-			<NcCheckboxRadioSwitch v-model="settings.deckClassify" type="switch">
-				{{ t('Let the model pick a category column') }}
-			</NcCheckboxRadioSwitch>
-			<div class="todofolder-form__field">
-				<label class="todofolder-form__label">{{ t('Inbox column (new cards)') }}</label>
-				<NcSelect v-model="settings.deckInboxStackId" :options="stackOptions" :clearable="true" :aria-label="t('Inbox column (new cards)')" />
-			</div>
-			<div class="todofolder-form__field">
-				<label class="todofolder-form__label">{{ t('When to classify') }}</label>
-				<select v-model="settings.deckClassifyTiming" class="todofolder-native-select">
-					<option value="on_done">{{ t('When I mark it done') }}</option>
-					<option value="on_create">{{ t('When the card is created') }}</option>
-					<option value="manual">{{ t('Only manually') }}</option>
-				</select>
-			</div>
-			<div class="todofolder-form__field">
-				<label class="todofolder-form__label">{{ t('Where a finished card goes') }}</label>
-				<select v-model="settings.deckDoneTarget" class="todofolder-native-select">
-					<option value="category">{{ t('Into its category column') }}</option>
-					<option value="fixed">{{ t('Into one fixed done column') }}</option>
-					<option value="in_place">{{ t('Stay in place') }}</option>
-				</select>
-			</div>
-			<div class="todofolder-form__field">
-				<label class="todofolder-form__label">{{ t('Reconcile with Deck every (minutes)') }}</label>
-				<NcTextField v-model="settings.deckReconcileInterval" type="number" :label="t('Reconcile interval')" />
-			</div>
 		</div>
 		<template #actions>
 			<NcDialogButton :label="t('Cancel')" :callback="closeSettingsDialog" />
@@ -454,6 +417,40 @@ export default {
 		},
 		stackOptions() {
 			return this.stacks.map((s) => ({ id: s.id, label: s.title }))
+		},
+
+		statusOptions() {
+			return [
+				{ id: 'all', label: this.t('All') },
+				{ id: 'ready', label: this.t('Ready') },
+				{ id: 'in_progress', label: this.t('In progress') },
+				{ id: 'done', label: this.t('Completed') },
+				{ id: 'error', label: this.t('Error') },
+				{ id: 'ignored', label: this.t('Ignored') },
+			]
+		},
+		statusFilterChoice: {
+			get() {
+				return this.statusOptions.find((option) => option.id === this.statusFilter) || this.statusOptions[0]
+			},
+			set(choice) {
+				this.statusFilter = choice ? choice.id : 'all'
+			},
+		},
+		sortOptions() {
+			return [
+				{ id: 'due', label: this.t('Due date') },
+				{ id: 'priority', label: this.t('Priority') },
+				{ id: 'updated', label: this.t('Recently changed') },
+			]
+		},
+		sortChoice: {
+			get() {
+				return this.sortOptions.find((option) => option.id === this.sortBy) || this.sortOptions[0]
+			},
+			set(choice) {
+				this.sortBy = choice ? choice.id : 'due'
+			},
 		},
 		deckBoard: {
 			get() {
@@ -706,11 +703,6 @@ export default {
 		openSettingsDialog() {
 			this.settings = {
 				autoDeck: this.current.autoDeck,
-				deckClassify: !!this.current.deckClassify,
-				deckClassifyTiming: this.current.deckClassifyTiming || 'on_done',
-				deckDoneTarget: this.current.deckDoneTarget || 'category',
-				deckInboxStackId: this.current.deckInboxStackId ?? null,
-				deckReconcileInterval: this.current.deckReconcileInterval ?? 15,
 				scanInterval: this.current.scanInterval,
 				scanEnabled: this.current.scanEnabled,
 				deckBoardId: this.current.deckBoardId ?? null,
@@ -819,11 +811,6 @@ export default {
 					method: 'PUT',
 					data: {
 						autoDeck: this.settings.autoDeck,
-						deckClassify: !!this.settings.deckClassify,
-						deckClassifyTiming: this.settings.deckClassifyTiming,
-						deckDoneTarget: this.settings.deckDoneTarget,
-						deckInboxStackId: this.settings.deckInboxStackId ? Number(this.settings.deckInboxStackId) : null,
-						deckReconcileInterval: Number(this.settings.deckReconcileInterval) || 15,
 						scanInterval: Number(this.settings.scanInterval),
 						scanEnabled: this.settings.scanEnabled,
 						deckBoardId: this.settings.deckBoardId,
@@ -997,6 +984,15 @@ export default {
 .todofolder-filters input { flex: 1 1 12em; min-width: 8em; }
 .todofolder-task--overdue .list-item-content__name { color: var(--color-error); }
 
+
+.todofolder-filters { display: flex !important; flex-wrap: wrap; gap: 8px; align-items: center; padding: 4px 16px 8px; }
+.todofolder-filters > * { flex: 0 0 auto; }
+.todofolder-filters > * { flex: 0 0 auto !important; }
+.todofolder-filters .v-select.todofolder-filters__status,
+.todofolder-filters .v-select.todofolder-filters__sort { width: 200px !important; flex: 0 0 200px !important; }
+.todofolder-filters .input-field.todofolder-filters__search,
+.todofolder-filters__search { width: 260px !important; flex: 0 0 260px !important; margin-left: auto !important; }
+.todofolder-filters .v-select.todofolder-filters__status, .todofolder-filters .v-select.todofolder-filters__sort { width: 11em; }
 </style>
 
 <style scoped>
